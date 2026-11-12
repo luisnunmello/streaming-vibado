@@ -87,6 +87,10 @@ export function registerSignaling(io: Server, sfu: Sfu) {
       await transportOf(transportId).connect({ dtlsParameters });
     });
 
+    on('closeTransport', ({ transportId }) => {
+      peer.transports.get(transportId)?.close(); // also closes its producers/consumers
+    });
+
     on('produce', async ({ transportId, kind, rtpParameters, appData }) => {
       needAdmin();
       if (streamerId && streamerId !== socket.id) throw new ClientError('Another admin session is already streaming');

@@ -1,0 +1,178 @@
+<div class="layout">
+  <div class="col">
+    <div class="card stage-card">
+      <div class="screen">
+        <video #preview autoplay muted playsinline [class.hidden]="!s.preview()"></video>
+        @if (!s.preview()) {
+          <div class="placeholder">
+            <p>@if (s.state() === 'starting') { Pick a screen, window or tab… } @else { Preview appears here }</p>
+          </div>
+        }
+      </div>
+
+      <div class="statusbar">
+        <span class="pill" [class.live]="live()" [class.starting]="s.state() === 'starting'">
+          {{ live() ? 'LIVE' : s.state() === 'starting' ? 'STARTING' : 'OFFLINE' }}
+        </span>
+        <span class="muted">{{ s.viewers() }} viewer{{ s.viewers() === 1 ? '' : 's' }}</span>
+        @if (live() && s.viewers() > 0) {
+          <span class="muted" title="Viewers × bitrate: what your server uploads right now (at most)">≈ {{ egressMbps() }} Mbps out</span>
+        }
+        <span class="spacer"></span>
+        <button type="button" class="btn big" [class.primary]="!busy()" [class.danger]="busy()" [disabled]="!secure && !busy()" (click)="toggle()">
+          {{ busy() ? 'Stop streaming' : 'Start streaming' }}
+        </button>
+      </div>
+
+      @if (!secure) {
+        <p class="error">Screen capture needs HTTPS (or localhost) and a desktop Chromium-based browser.</p>
+      }
+      @if (s.error(); as e) {
+        <p class="error">{{ e }}</p>
+      }
+      @if (s.notice(); as n) {
+        <p class="notice">{{ n }}</p>
+      }
+    </div>
+
+    @if (live()) {
+      <div class="card">
+        <h2>Live stats</h2>
+        @if (s.stats(); as st) {
+          <div class="metrics">
+            <div><span>Sending</span><b>{{ (st.bitrateKbps / 1000).toFixed(1) }} Mbps</b></div>
+            <div><span>Output</span><b>{{ st.width }}×{{ st.height }} @ {{ st.fps }}</b></div>
+            <div [class.warn]="st.limitation !== 'none'">
+              <span>Encoder limit</span>
+              <b>{{ st.limitation === 'none' ? 'None' : st.limitation === 'cpu' ? 'CPU too slow' : st.limitation === 'bandwidth' ? 'Upload bandwidth' : 'Other' }}</b>
+            </div>
+            <div [class.warn]="st.encodeMs > 12"><span>Encode time</span><b>{{ st.encodeMs }} ms/frame</b></div>
+            <div [class.warn]="st.lossPct > 2"><span>Packet loss</span><b>{{ st.lossPct }}%</b></div>
+            <div><span>Round trip</span><b>{{ st.rttMs ?? '–' }}{{ st.rttMs != null ? ' ms' : '' }}</b></div>
+            <div><span>Est. bandwidth</span><b>{{ st.availableKbps != null ? (st.availableKbps / 1000).toFixed(1) + ' Mbps' : '–' }}</b></div>
+            <div><span>Source</span><b>{{ s.source()?.width }}×{{ s.source()?.height }}</b></div>
+          </div>
+          @if (st.limitation === 'cpu') {
+            <p class="notice">The encoder cannot keep up. Lower the resolution or frame rate, or restart with H.264 (hardware).</p>
+          } @else if (st.limitation === 'bandwidth') {
+            <p class="notice">Your upload cannot carry this bitrate. Lower the bitrate or resolution.</p>
+          }
+        } @else {
+          <p class="muted">Collecting…</p>
+        }
+      </div>
+    }
+  </div>
+
+  <div class="col">
+    <div class="card">
+      <h2>Video quality <small>live</small></h2>
+      <div class="chips">
+        @for (p of presets; track p.label) {
+          <button type="button" class="chip" [class.on]="isPreset(p)" (click)="applyPreset(p)">
+            <b>{{ p.label }}</b><span>{{ p.hint }}</span>
+          </button>
+        }
+      </div>
+
+      <div class="field">
+        <span class="label">Frame rate</span>
+        <div class="seg">
+          @for (f of fpsOptions; track f) {
+            <button type="button" [class.on]="settings().fps === f" (click)="patch({ fps: f })">{{ f }} fps</button>
+          }
+        </div>
+      </div>
+
+      <div class="field">
+        <span class="label">Resolution</span>
+        <div class="seg">
+          @for (r of resolutions; track r.value) {
+            <button type="button" [class.on]="settings().height === r.value" (click)="patch({ height: r.value })">{{ r.label }}</button>
+          }
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="bitrate">Bitrate <b>{{ settings().bitrateMbps }} Mbps</b></label>
+        <input id="bitrate" type="range" min="1" max="40" step="0.5" [value]="settings().bitrateMbps"
+               (input)="patch({ bitrateMbps: +$any($event.target).value })" />
+        <span class="hint">Higher keeps fast motion clean but uses more upload (yours and the server's).</span>
+      </div>
+
+      <div class="field">
+        <span class="label">When it can't keep up</span>
+        <div class="seg">
+          <button type="button" [class.on]="settings().priority === 'motion'" (click)="patch({ priority: 'motion' })">Keep smooth</button>
+          <button type="button" [class.on]="settings().priority === 'balanced'" (click)="patch({ priority: 'balanced' })">Balanced</button>
+          <button type="button" [class.on]="settings().priority === 'detail'" (click)="patch({ priority: 'detail' })">Keep sharp</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Codec <small>applies on next start</small></h2>
+      <div class="seg">
+        @for (c of codecs; track c.value) {
+          <button type="button" [class.on]="settings().codec === c.value" [disabled]="busy()" (click)="patch({ codec: c.value })">{{ c.label }}</button>
+        }
+      </div>
+      <p class="hint">{{ codecHint() }}</p>
+    </div>
+
+    <div class="card">
+      <h2>Audio</h2>
+      <div class="field">
+        <span class="label">Screen audio <small>applies on next start</small></span>
+        <div class="seg">
+          @for (m of audioModes; track m.value) {
+            <button type="button" [class.on]="settings().audioMode === m.value" [disabled]="busy()" (click)="patch({ audioMode: m.value })">{{ m.label }}</button>
+          }
+        </div>
+        <span class="hint">{{ audioHint() }}</span>
+      </div>
+
+      <div class="field">
+        <label for="device">Extra input (mic or virtual cable) <small>applies on next start</small></label>
+        <div class="row">
+          <select id="device" [disabled]="busy()" [value]="settings().audioDeviceId" (change)="patch({ audioDeviceId: $any($event.target).value })">
+            <option value="">None</option>
+            @for (d of devices(); track d.deviceId; let i = $index) {
+              <option [value]="d.deviceId" [selected]="d.deviceId === settings().audioDeviceId">{{ deviceLabel(d, i) }}</option>
+            }
+          </select>
+          <button type="button" class="btn small" [disabled]="busy()" (click)="refreshDevices(true)" title="Ask for microphone permission to show device names">Refresh</button>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="sg">Screen audio volume <b>{{ (settings().screenAudioGain * 100).toFixed(0) }}%</b></label>
+        <input id="sg" type="range" min="0" max="1.5" step="0.05" [value]="settings().screenAudioGain"
+               (input)="patch({ screenAudioGain: +$any($event.target).value })" />
+      </div>
+      <div class="field">
+        <label for="dg">Extra input volume <b>{{ (settings().deviceGain * 100).toFixed(0) }}%</b></label>
+        <input id="dg" type="range" min="0" max="1.5" step="0.05" [value]="settings().deviceGain"
+               (input)="patch({ deviceGain: +$any($event.target).value })" />
+      </div>
+      <button type="button" class="btn small" [class.danger]="settings().muted" (click)="patch({ muted: !settings().muted })">
+        {{ settings().muted ? 'Audio muted: click to unmute' : 'Mute all audio' }}
+      </button>
+
+      <details class="help">
+        <summary>How do I exclude specific apps?</summary>
+        <p>
+          Browsers cannot pick apps individually. Two ways to get close:
+        </p>
+        <ol>
+          <li><b>Shared window only</b>: pick it above, then share one window. Sound from other apps is left out.</li>
+          <li>
+            <b>Virtual audio cable</b> (e.g. VB-CABLE): in Windows <i>Settings → System → Sound → Volume mixer</i>, set the
+            apps you want to broadcast to output to "CABLE Input". Then choose "CABLE Output" as the extra input here and set
+            screen audio to "No screen audio". Only those apps are heard.
+          </li>
+        </ol>
+      </details>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,97 @@
+import { Component, ElementRef, OnInit, OnDestroy, computed, effect, inject, signal, untracked, viewChild } from '@angular/core';
+import { StreamerService } from '../core/streamer.service';
+import {
+  CODECS,
+  PRESETS,
+  RESOLUTIONS,
+  type AudioMode,
+  type Preset,
+  type StreamSettings,
+  loadSettings,
+  saveSettings,
+} from '../core/stream-settings';
+
+@Component({
+  selector: 'app-streamer-panel',
+  templateUrl: './streamer-panel.html',
+  styleUrl: './streamer-panel.scss',
+})
+export class StreamerPanel implements OnInit, OnDestroy {
+  protected readonly s = inject(StreamerService);
+  protected readonly settings = signal<StreamSettings>(loadSettings());
+  protected readonly devices = signal<MediaDeviceInfo[]>([]);
+  protected readonly presets = PRESETS;
+  protected readonly resolutions = RESOLUTIONS;
+  protected readonly codecs = CODECS;
+  protected readonly fpsOptions = [30, 60, 120];
+  protected readonly audioModes: { value: AudioMode; label: string; hint: string }[] = [
+    { value: 'none', label: 'No screen audio', hint: 'Nothing from the screen is sent.' },
+    { value: 'system', label: 'Everything', hint: 'All sound from the shared screen (or tab).' },
+    { value: 'window', label: 'Shared window only', hint: 'Only sound from the window you pick; other apps are excluded. Chrome/Edge on Windows.' },
+  ];
+
+  protected readonly secure = window.isSecureContext && !!navigator.mediaDevices?.getDisplayMedia;
+  protected readonly live = computed(() => this.s.state() === 'live');
+  protected readonly busy = computed(() => this.s.state() !== 'idle');
+  protected readonly codecHint = computed(() => CODECS.find((c) => c.value === this.settings().codec)?.hint ?? '');
+  protected readonly audioHint = computed(() => this.audioModes.find((m) => m.value === this.settings().audioMode)?.hint ?? '');
+  protected readonly egressMbps = computed(() => Math.round(this.s.viewers() * this.settings().bitrateMbps * 10) / 10);
+
+  private readonly previewEl = viewChild<ElementRef<HTMLVideoElement>>('preview');
+  private applyTimer?: ReturnType<typeof setTimeout>;
+
+  constructor() {
+    effect(() => {
+      const el = this.previewEl()?.nativeElement;
+      const stream = this.s.preview();
+      if (el) el.srcObject = stream;
+    });
+    // Persist settings and push live-adjustable ones to the running encoder.
+    effect(() => {
+      const cur = this.settings();
+      saveSettings(cur);
+      untracked(() => {
+        clearTimeout(this.applyTimer);
+        this.applyTimer = setTimeout(() => void this.s.applyLive(cur), 150);
+      });
+    });
+  }
+
+  ngOnInit(): void {
+    void this.refreshDevices(false);
+  }
+
+  ngOnDestroy(): void {
+    clearTimeout(this.applyTimer);
+  }
+
+  protected patch(values: Partial<StreamSettings>): void {
+    this.settings.update((cur) => ({ ...cur, ...values }));
+  }
+
+  protected applyPreset(p: Preset): void {
+    this.patch(p.values);
+  }
+
+  protected isPreset(p: Preset): boolean {
+    const cur = this.settings() as unknown as Record<string, unknown>;
+    return Object.entries(p.values).every(([k, v]) => cur[k] === v);
+  }
+
+  protected async refreshDevices(askPermission: boolean): Promise<void> {
+    try {
+      this.devices.set(await this.s.listAudioInputs(askPermission));
+    } catch {
+      this.devices.set([]);
+    }
+  }
+
+  protected toggle(): void {
+    if (this.s.state() === 'idle') void this.s.start(this.settings());
+    else void this.s.stop();
+  }
+
+  protected deviceLabel(d: MediaDeviceInfo, i: number): string {
+    return d.label || `Audio input ${i + 1}`;
+  }
+}
