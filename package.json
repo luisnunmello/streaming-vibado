@@ -1,0 +1,12 @@
+{
+  "name": "streaming",
+  "private": true,
+  "description": "Screen sharing through an SFU (mediasoup) with an Express backend and an Angular client",
+  "scripts": {
+    "install:all": "npm --prefix server install && npm --prefix client install",
+    "dev:server": "npm --prefix server run dev",
+    "dev:client": "npm --prefix client start",
+    "build": "npm --prefix client run build && npm --prefix server run build",
+    "start": "npm --prefix server start"
+  }
+}

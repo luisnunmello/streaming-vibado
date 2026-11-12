@@ -1,0 +1,29 @@
+services:
+  streaming:
+    build: .
+    image: streaming-app:latest
+    container_name: streaming
+    restart: unless-stopped
+    environment:
+      # Public IP of this server (what browsers connect to for the video). Required.
+      MEDIASOUP_ANNOUNCED_IP: ${MEDIASOUP_ANNOUNCED_IP:?Set MEDIASOUP_ANNOUNCED_IP in .env to your server public IP}
+      RTC_PORT: ${RTC_PORT:-40000}
+      # Only used on the very first start; afterwards the password lives in the data volume
+      # and is changed from the admin page. Leave empty to have one generated (see `docker compose logs`).
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      # nginx sits in front: trust its X-Forwarded-For for login rate limiting.
+      TRUST_PROXY: "1"
+    ports:
+      # Web + signaling: bound to localhost, nginx proxies to it.
+      - "127.0.0.1:${PORT:-3000}:3000"
+      # Video: must be reachable directly from the internet (UDP preferred, TCP as fallback).
+      - "${RTC_PORT:-40000}:${RTC_PORT:-40000}/udp"
+      - "${RTC_PORT:-40000}:${RTC_PORT:-40000}/tcp"
+    volumes:
+      - streaming-data:/data
+    # On a busy Linux server, Docker's UDP port forwarding costs CPU. Host networking avoids it:
+    # remove the `ports:` block above and uncomment the next line (the app then listens on PORT directly).
+    # network_mode: host
+
+volumes:
+  streaming-data:

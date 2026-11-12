@@ -39,6 +39,7 @@ export class StreamerService {
   private micStream?: MediaStream;
   private mixer?: AudioMixer;
   private statsTimer?: ReturnType<typeof setInterval>;
+  private appliedFps = 0;
   private lastBytes = 0;
   private lastStatsAt = 0;
   private unsubs: Array<() => void> = [];
@@ -129,13 +130,9 @@ export class StreamerService {
   private async capture(s: StreamSettings): Promise<void> {
     const wantScreenAudio = s.audioMode !== 'none';
     // Chromium-only options (ignored elsewhere), hence the loose typing.
+    this.appliedFps = s.fps;
     const options: any = {
-      video: {
-        cursor: 'always',
-        frameRate: { ideal: s.fps, max: s.fps },
-        width: { max: 3840 },
-        height: { max: 2160 },
-      },
+      video: { cursor: 'always', ...this.captureConstraints(s.fps) },
       audio: wantScreenAudio
         ? { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 2 }
         : false,
@@ -177,6 +174,11 @@ export class StreamerService {
       this.mixer = this.createMixer(screenAudio, deviceAudio, s);
     }
     this.preview.set(new MediaStream([video]));
+  }
+
+  /** Capture at the screen's native size (up to 4K); the encoder downscales to the chosen output. */
+  private captureConstraints(fps: number): MediaTrackConstraints {
+    return { frameRate: { ideal: fps, max: fps }, width: { max: 3840 }, height: { max: 2160 } };
   }
 
   private createMixer(screen: MediaStreamTrack | undefined, device: MediaStreamTrack | undefined, s: StreamSettings): AudioMixer {
@@ -303,7 +305,12 @@ export class StreamerService {
     const video = this.displayStream?.getVideoTracks()[0];
     if (video) {
       video.contentHint = s.priority === 'motion' ? 'motion' : s.priority === 'detail' ? 'detail' : '';
-      video.applyConstraints({ frameRate: { ideal: s.fps, max: s.fps } }).catch(() => undefined);
+      if (s.fps !== this.appliedFps) {
+        this.appliedFps = s.fps;
+        // applyConstraints replaces the whole set, so the size caps must be sent again,
+        // and we must wait for it before reading the (possibly changed) source size.
+        await video.applyConstraints({ ...this.captureConstraints(s.fps) }).catch(() => undefined);
+      }
       this.updateSource(video);
     }
     try {

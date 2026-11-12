@@ -60,6 +60,10 @@ function requireAdmin(req: Request, res: Response, next: NextFunction) {
   next();
 }
 
+app.get('/api/health', (_req, res) => {
+  res.json({ ok: true });
+});
+
 app.post('/api/admin/login', (req, res) => {
   const ip = req.ip ?? 'unknown';
   const wait = loginLockedFor(ip);

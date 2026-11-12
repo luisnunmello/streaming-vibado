@@ -24,10 +24,11 @@ function write(password: string): void {
 /** Creates the master password on first run. Returns the generated password if one was created. */
 export function initSettings(): string | null {
   if (fs.existsSync(file)) return null;
-  const generated = !process.env.ADMIN_PASSWORD;
-  const password = process.env.ADMIN_PASSWORD ?? crypto.randomBytes(12).toString('base64url');
+  // `||` on purpose: an empty ADMIN_PASSWORD (e.g. from an unset compose variable) must not become the password.
+  const fromEnv = process.env.ADMIN_PASSWORD || undefined;
+  const password = fromEnv ?? crypto.randomBytes(12).toString('base64url');
   write(password);
-  return generated ? password : null;
+  return fromEnv ? null : password;
 }
 
 export function verifyPassword(password: string): boolean {
