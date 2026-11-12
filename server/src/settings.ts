@@ -23,7 +23,15 @@ function write(password: string): void {
 
 /** Creates the master password on first run. Returns the generated password if one was created. */
 export function initSettings(): string | null {
-  if (fs.existsSync(file)) return null;
+  if (fs.existsSync(file)) {
+    if (process.env.ADMIN_PASSWORD) {
+      console.log(
+        '[auth] ADMIN_PASSWORD is ignored: a master password is already stored. ' +
+          'Change it on /admin, or reset it (see README, "Forgot the password?").',
+      );
+    }
+    return null;
+  }
   // `||` on purpose: an empty ADMIN_PASSWORD (e.g. from an unset compose variable) must not become the password.
   const fromEnv = process.env.ADMIN_PASSWORD || undefined;
   const password = fromEnv ?? crypto.randomBytes(12).toString('base64url');
