@@ -1,0 +1,42 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import crypto from 'node:crypto';
+import { config } from './config.js';
+
+interface Stored {
+  salt: string;
+  hash: string;
+}
+
+const file = path.join(config.dataDir, 'settings.json');
+
+function derive(password: string, salt: Buffer): Buffer {
+  return crypto.scryptSync(password, salt, 64);
+}
+
+function write(password: string): void {
+  const salt = crypto.randomBytes(16);
+  const data: Stored = { salt: salt.toString('hex'), hash: derive(password, salt).toString('hex') };
+  fs.mkdirSync(config.dataDir, { recursive: true });
+  fs.writeFileSync(file, JSON.stringify(data), { mode: 0o600 });
+}
+
+/** Creates the master password on first run. Returns the generated password if one was created. */
+export function initSettings(): string | null {
+  if (fs.existsSync(file)) return null;
+  const generated = !process.env.ADMIN_PASSWORD;
+  const password = process.env.ADMIN_PASSWORD ?? crypto.randomBytes(12).toString('base64url');
+  write(password);
+  return generated ? password : null;
+}
+
+export function verifyPassword(password: string): boolean {
+  const stored: Stored = JSON.parse(fs.readFileSync(file, 'utf8'));
+  const expected = Buffer.from(stored.hash, 'hex');
+  const actual = derive(password, Buffer.from(stored.salt, 'hex'));
+  return actual.length === expected.length && crypto.timingSafeEqual(actual, expected);
+}
+
+export function setPassword(password: string): void {
+  write(password);
+}
