@@ -72,7 +72,8 @@ import { absoluteUrl, copyText } from '../../core/util';
                     <span class="muted">offline</span>
                   }
                 </td>
-                <td class="actions">
+                <td>
+                <div class="actions">
                   @if (isMine(r)) {
                     <a class="btn small primary" [routerLink]="['/dashboard/rooms', r.slug]">{{ r.live ? 'Open studio' : 'Stream' }}</a>
                   }
@@ -98,6 +99,7 @@ import { absoluteUrl, copyText } from '../../core/util';
                       }
                     </div>
                   </details>
+                </div>
                 </td>
               </tr>
             } @empty {
