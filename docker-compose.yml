@@ -8,8 +8,11 @@ services:
       # Public IP of this server (what browsers connect to for the video). Required.
       MEDIASOUP_ANNOUNCED_IP: ${MEDIASOUP_ANNOUNCED_IP:?Set MEDIASOUP_ANNOUNCED_IP in .env to your server public IP}
       RTC_PORT: ${RTC_PORT:-40000}
+      # Bandwidth protection budgets (Mbps). Both can also be changed later on the Bandwidth page.
+      EGRESS_BUDGET_MBPS: ${EGRESS_BUDGET_MBPS:-500}
+      INGRESS_BUDGET_MBPS: ${INGRESS_BUDGET_MBPS:-800}
       # Only used on the very first start; afterwards the password lives in the data volume
-      # and is changed from the admin page. Leave empty to have one generated (see `docker compose logs`).
+      # and is changed under Account in the dashboard. Leave empty to have one generated (see `docker compose logs`).
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
       # nginx sits in front: trust its X-Forwarded-For for login rate limiting.
       TRUST_PROXY: "1"

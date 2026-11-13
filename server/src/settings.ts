@@ -27,7 +27,7 @@ export function initSettings(): string | null {
     if (process.env.ADMIN_PASSWORD) {
       console.log(
         '[auth] ADMIN_PASSWORD is ignored: a master password is already stored. ' +
-          'Change it on /admin, or reset it (see README, "Forgot the password?").',
+          'Change it under Account in the dashboard, or reset it (see README, "Forgot the password?").',
       );
     }
     return null;

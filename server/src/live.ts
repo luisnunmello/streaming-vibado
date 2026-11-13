@@ -490,7 +490,7 @@ export class LiveService {
   }
 
   private checkCanStart(rt: RoomRuntime, limits: Limits | null, guestId: number | null): void {
-    if (guestId === null || !limits) return; // the admin is only bound by the global ingress budget
+    if (guestId === null || !limits) return; // the admin's own streams are never refused here
     const g = getGlobals();
     if (g.guestStreamsPaused) throw new ClientError('Guest streaming is paused by the admin right now');
     const liveRooms = [...this.runtimes.values()].filter((r) => r !== rt && r.room.ownerId === guestId && this.isLive(r)).length;
