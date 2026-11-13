@@ -333,3 +333,23 @@ h1.page-title {
   margin: 0 0 1rem;
   font-size: 1.4rem;
 }
+
+/* multi-line text uses the same look as the single-line fields */
+textarea {
+  width: 100%;
+  padding: 0.55rem 0.7rem;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  resize: vertical;
+
+  &:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+  }
+  &:disabled {
+    opacity: 0.5;
+  }
+}

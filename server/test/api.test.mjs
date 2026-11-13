@@ -614,3 +614,35 @@ describe('appeals', () => {
     assert.deepEqual([clear.restricted, clear.appealStatus], [false, '']);
   });
 });
+
+describe('lifting only what a restriction caused', () => {
+  it('lifting a user does not lift people who were restricted for their own reasons', async () => {
+    const admin = await login('admin', 'new-master-pass-1');
+    const mk = async (name) => {
+      const r = await api('POST', '/api/admin/users', { token: admin, body: { name, referralQuota: 2 } });
+      const a = await api('POST', '/api/activate', { body: { key: r.key, password: name + '-password-1' } });
+      return { id: r.user.id, token: a.token };
+    };
+    const boss = await mk('lboss');
+    const ref = await api('POST', '/api/me/referrals', { token: boss.token });
+    const kidA = await api('POST', '/api/activate', { body: { key: ref.key, password: 'lkida-password-1', name: 'lkida' } });
+    const ref2 = await api('POST', '/api/me/referrals', { token: boss.token });
+    const kidB = await api('POST', '/api/activate', { body: { key: ref2.key, password: 'lkidb-password-1', name: 'lkidb' } });
+    const idOf = async (t) => (await api('GET', '/api/me', { token: t })).userId;
+    const [a, b] = [await idOf(kidA.token), await idOf(kidB.token)];
+
+    await api('POST', `/api/admin/users/${a}/restrict`, { token: admin, body: { reason: 'own reason', children: false } });
+    await api('POST', `/api/admin/users/${boss.id}/restrict`, { token: admin, body: { reason: 'boss reason' } });
+    const state = async () => (await api('GET', '/api/admin/users', { token: admin })).users.reduce((m, u) => ({ ...m, [u.id]: u }), {});
+    let s = await state();
+    assert.equal(s[a].restrictedReason, 'own reason', 'an existing restriction keeps its own reason');
+    assert.equal(s[a].restrictedById, null);
+    assert.equal(s[b].restrictedById, boss.id);
+
+    await api('POST', `/api/admin/users/${boss.id}/unrestrict`, { token: admin, body: {} });
+    s = await state();
+    assert.equal(s[boss.id].restricted, false);
+    assert.equal(s[b].restricted, false, 'caused by the boss: lifted');
+    assert.equal(s[a].restricted, true, 'not caused by the boss: stays');
+  });
+});

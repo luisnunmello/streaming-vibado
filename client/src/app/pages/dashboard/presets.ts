@@ -1,21 +1,25 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ApiService } from '../../core/api.service';
+import { DialogService } from '../../core/dialog.service';
 import { describeLimits, type Limits, type Preset } from '../../core/models';
 import { LimitsEditor } from '../../shared/limits-editor';
+import { Modal } from '../../shared/modal';
 
 @Component({
   selector: 'app-presets',
-  imports: [FormsModule, LimitsEditor],
+  imports: [FormsModule, LimitsEditor, Modal],
   template: `
-    <h1 class="page-title">Limit presets</h1>
+    <div class="head">
+      <h1 class="page-title">Limit presets</h1>
+      <button type="button" class="btn primary" (click)="openCreate()">New preset</button>
+    </div>
     <p class="intro muted">
       A preset is a named set of limits. Give a preset to users and they follow it: when you change the preset, every user on it
       gets the new limits immediately, including in their open studio.
     </p>
 
-    <div class="card create">
-      <h2>New preset</h2>
+    <app-modal [open]="createOpen()" [wide]="true" [title]="cloneOf() ? 'Clone preset' : 'New preset'" (closed)="createOpen.set(false)">
       <form (ngSubmit)="create()">
         <div class="row">
           <div class="field grow">
@@ -24,17 +28,25 @@ import { LimitsEditor } from '../../shared/limits-editor';
           </div>
           <label class="check"><input type="checkbox" name="pdef" [(ngModel)]="newDefault" /> Use for new users</label>
         </div>
+        @if (cloneOf(); as c) {
+          <p class="muted hint">Starts as a copy of <b>{{ c.name }}</b>. Change anything you like.</p>
+        }
         @if (newLimits(); as l) {
           <app-limits-editor [limits]="l" (limitsChange)="newLimits.set($event)" />
         }
-        <div class="row actions">
+        @if (error()) {
+          <p class="error">{{ error() }}</p>
+        }
+        <div class="modal-actions">
+          <button class="btn" type="button" (click)="createOpen.set(false)">Cancel</button>
           <button class="btn primary" type="submit" [disabled]="busy() || !newName.trim()">Create preset</button>
         </div>
       </form>
-      @if (error()) {
-        <p class="error">{{ error() }}</p>
-      }
-    </div>
+    </app-modal>
+
+    @if (error() && !createOpen()) {
+      <p class="error">{{ error() }}</p>
+    }
 
     <div class="card">
       <div class="table-wrap">
@@ -52,6 +64,7 @@ import { LimitsEditor } from '../../shared/limits-editor';
                 <td class="muted summary">{{ describe(p.limits) }}</td>
                 <td>{{ p.userCount }}</td>
                 <td class="right">
+                  <button type="button" class="btn small" (click)="openCreate(p)">Clone</button>
                   <button type="button" class="btn small" (click)="toggleEdit(p)">{{ editing()?.id === p.id ? 'Close' : 'Edit' }}</button>
                 </td>
               </tr>
@@ -94,6 +107,19 @@ import { LimitsEditor } from '../../shared/limits-editor';
     </div>
   `,
   styles: `
+    .head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+    .modal-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 0.5rem;
+      margin-top: 1rem;
+    }
     .intro {
       margin: -0.4rem 0 1rem;
       max-width: 70ch;
@@ -131,10 +157,13 @@ import { LimitsEditor } from '../../shared/limits-editor';
 })
 export class Presets implements OnInit {
   private readonly api = inject(ApiService);
+  private readonly dialog = inject(DialogService);
   protected readonly presets = signal<Preset[]>([]);
   protected readonly error = signal<string | null>(null);
   protected readonly busy = signal(false);
   protected readonly editing = signal<Preset | null>(null);
+  protected readonly createOpen = signal(false);
+  protected readonly cloneOf = signal<Preset | null>(null);
   protected readonly editName = signal('');
   protected readonly editLimits = signal<Limits | null>(null);
   protected readonly newLimits = signal<Limits | null>(null);
@@ -166,14 +195,29 @@ export class Presets implements OnInit {
     }
   }
 
+  /** Opens the "new preset" dialog, empty (starting from the default preset) or as a copy of `from`. */
+  protected openCreate(from?: Preset): void {
+    const base = from ?? this.presets().find((p) => p.isDefault);
+    this.cloneOf.set(from ?? null);
+    this.newName = from ? `${from.name} copy`.slice(0, 40) : '';
+    this.newDefault = false;
+    if (base) this.newLimits.set({ ...base.limits });
+    this.error.set(null);
+    this.createOpen.set(true);
+  }
+
   protected async create(): Promise<void> {
     this.busy.set(true);
-    await this.act(async () => {
+    this.error.set(null);
+    try {
       await this.api.post('/api/admin/presets', { name: this.newName.trim(), limits: this.newLimits(), isDefault: this.newDefault });
-      this.newName = '';
-      this.newDefault = false;
-    });
-    this.busy.set(false);
+      this.createOpen.set(false);
+      await this.load();
+    } catch (e: any) {
+      this.error.set(e.message);
+    } finally {
+      this.busy.set(false);
+    }
   }
 
   protected toggleEdit(p: Preset): void {
@@ -197,12 +241,12 @@ export class Presets implements OnInit {
     return this.act(() => this.api.patch(`/api/admin/presets/${p.id}`, { isDefault: true }));
   }
 
-  protected remove(p: Preset): Promise<void> {
+  protected async remove(p: Preset): Promise<void> {
     const msg =
       p.userCount > 0
         ? `Delete "${p.name}"? Its ${p.userCount} user(s) keep their current limits as custom limits.`
         : `Delete "${p.name}"?`;
-    if (!confirm(msg)) return Promise.resolve();
+    if (!(await this.dialog.confirm(msg, { title: 'Delete preset', confirmLabel: 'Delete', danger: true }))) return;
     return this.act(async () => {
       await this.api.delete(`/api/admin/presets/${p.id}`);
       this.editing.set(null);

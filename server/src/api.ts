@@ -140,6 +140,7 @@ export function buildApi(live: LiveService, budget: BudgetManager): Router {
     status: g.status,
     restricted: g.restricted,
     restrictedReason: g.restrictedReason,
+    restrictedById: g.restrictedBy,
     appealStatus: g.appealStatus,
     appealText: g.appealText,
     appealAt: g.appealAt,
@@ -535,7 +536,9 @@ export function buildApi(live: LiveService, budget: BudgetManager): Router {
         }
       }
       for (const [uid, why] of targets) {
-        setRestriction(uid, true, why);
+        // someone already restricted for their own reasons keeps that restriction (and its explanation)
+        if (uid !== id && getUser(uid)?.restricted) continue;
+        setRestriction(uid, true, why, uid === id ? null : id);
         for (const r of listRooms(uid)) live.closeRoom(r.id, 'This account is restricted');
         live.refreshLimits(uid);
       }
@@ -550,8 +553,10 @@ export function buildApi(live: LiveService, budget: BudgetManager): Router {
       const id = idParam(req);
       if (!getUser(id)) throw new HttpError(404, 'User not found');
       const ids = new Set<number>([id]);
-      if (req.body?.children !== false) for (const c of subtree(id)) ids.add(c);
-      if (req.body?.parents === true) for (const p of referrerOf(id)) ids.add(p);
+      // only those whose restriction was caused by this user
+      const causedHere = (uid: number): boolean => getUser(uid)?.restrictedBy === id;
+      if (req.body?.children !== false) for (const c of subtree(id).slice(1)) if (causedHere(c)) ids.add(c);
+      if (req.body?.parents === true) for (const p of referrerOf(id)) if (causedHere(p)) ids.add(p);
       for (const uid of ids) setRestriction(uid, false);
       res.json({ lifted: [...ids], users: listUsers().map(userView) });
     }),

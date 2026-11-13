@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit, inject, signal } from '@angular/core';
+import { Component, OnDestroy, OnInit, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { AuthService } from '../../core/auth.service';
@@ -6,7 +6,9 @@ import { StreamerService } from '../../core/streamer.service';
 import { ApiService } from '../../core/api.service';
 import { describeLimits, type Limits, type Preset, type UserView } from '../../core/models';
 import { absoluteUrl, copyText, formatBytes, timeAgo } from '../../core/util';
+import { DialogService } from '../../core/dialog.service';
 import { LimitsEditor } from '../../shared/limits-editor';
+import { Modal } from '../../shared/modal';
 
 interface Reveal {
   title: string;
@@ -19,12 +21,14 @@ const CUSTOM = 'custom';
 
 @Component({
   selector: 'app-users',
-  imports: [FormsModule, LimitsEditor, RouterLink],
+  imports: [FormsModule, LimitsEditor, Modal, RouterLink],
   template: `
-    <h1 class="page-title">Users</h1>
+    <div class="head">
+      <h1 class="page-title">Users</h1>
+      <button type="button" class="btn primary" (click)="openNew()">New user</button>
+    </div>
 
-    <div class="card create">
-      <h2>New user</h2>
+    <app-modal [open]="newOpen()" [wide]="true" title="New user" (closed)="newOpen.set(false)">
       <form (ngSubmit)="create()">
         <div class="row">
           <div class="field grow">
@@ -51,14 +55,19 @@ const CUSTOM = 'custom';
         @if (newLimits(); as l) {
           <app-limits-editor [limits]="l" (limitsChange)="editNew($event)" />
         }
-        <div class="row actions">
+        @if (error()) {
+          <p class="error">{{ error() }}</p>
+        }
+        <div class="modal-actions">
+          <button class="btn" type="button" (click)="newOpen.set(false)">Cancel</button>
           <button class="btn primary" type="submit" [disabled]="busy() || !newName.trim()">Create and generate key</button>
         </div>
       </form>
-      @if (error()) {
-        <p class="error">{{ error() }}</p>
-      }
-    </div>
+    </app-modal>
+
+    @if (error() && !newOpen()) {
+      <p class="error">{{ error() }}</p>
+    }
 
     @if (reveal(); as r) {
       <div class="card reveal">
@@ -169,40 +178,6 @@ const CUSTOM = 'custom';
                       @if (editLimits(); as l) {
                         <app-limits-editor [limits]="l" (limitsChange)="editUser($event)" />
                       }
-                      @if (u.restricted) {
-                        <div class="restrictbox">
-                          <p><b>Restricted:</b> {{ u.restrictedReason }}</p>
-                          @if (u.appealStatus === 'pending') {
-                            <div class="appealbox">
-                              <b>Appeal from {{ u.name }}</b> <span class="muted">{{ ago(u.appealAt) }}</span>
-                              <blockquote>{{ u.appealText }}</blockquote>
-                              <div class="field">
-                                <label [for]="'dr' + u.id">Reply if you deny it (shown to them)</label>
-                                <input [id]="'dr' + u.id" type="text" maxlength="500" [value]="denyReply()" (input)="denyReply.set($any($event.target).value)" />
-                              </div>
-                              <button type="button" class="btn small" (click)="denyAppeal(u)">Deny appeal</button>
-                              <span class="muted hint">To accept it, use "Lift restriction" below.</span>
-                            </div>
-                          } @else if (u.appealStatus === 'denied') {
-                            <p class="muted">Appeal denied. They can send a new one.</p>
-                          }
-                          <label class="check"><input type="checkbox" [checked]="optChildren()" (change)="optChildren.set($any($event.target).checked)" /> Also lift it for everyone they referred (and the people those referred…)</label>
-                          <label class="check"><input type="checkbox" [checked]="optParents()" (change)="optParents.set($any($event.target).checked)" /> Also lift it for who referred them</label>
-                          <button type="button" class="btn small" (click)="unrestrict(u)">Lift restriction</button>
-                        </div>
-                      } @else {
-                        <details class="restrictbox">
-                          <summary>Restrict access…</summary>
-                          <p class="muted hint">The user can still sign in, but sees a red warning with your reason and cannot use the website. Running streams stop and their rooms are hidden.</p>
-                          <div class="field">
-                            <label [for]="'rs' + u.id">Reason (shown to them)</label>
-                            <textarea [id]="'rs' + u.id" rows="2" maxlength="500" [value]="restrictReason()" (input)="restrictReason.set($any($event.target).value)"></textarea>
-                          </div>
-                          <label class="check"><input type="checkbox" [checked]="optChildren()" (change)="optChildren.set($any($event.target).checked)" /> Also restrict everyone they referred (and the people those referred…)</label>
-                          <label class="check"><input type="checkbox" [checked]="optParents()" (change)="optParents.set($any($event.target).checked)" /> Also restrict who referred them</label>
-                          <button type="button" class="btn small danger" (click)="restrict(u)">Restrict access</button>
-                        </details>
-                      }
                       @if (u.invitedByName) {
                         <p class="muted hint">Referred by {{ u.invitedByName }}, so these limits can never go above theirs.</p>
                       }
@@ -218,6 +193,8 @@ const CUSTOM = 'custom';
                         @if (u.status === 'active') {
                           <button type="button" class="btn small" title="Sign in as this user for debugging; you can return to admin from the top bar" (click)="useAs(u)">Use temporarily</button>
                         }
+                        <button type="button" class="btn small" title="Create a preset from the limits shown above" (click)="openSavePreset(u)">Save limits as preset…</button>
+                        <button type="button" class="btn small" [class.danger]="!u.restricted" (click)="openRestrict(u)">{{ u.restricted ? 'Restriction…' : 'Restrict…' }}</button>
                         <button type="button" class="btn small danger" (click)="remove(u)">Delete</button>
                       </div>
                     </td>
@@ -231,6 +208,72 @@ const CUSTOM = 'custom';
         </table>
       </div>
     </div>
+
+    <app-modal [open]="!!presetFrom()" title="Save limits as a preset" (closed)="presetFrom.set(null)">
+      @if (presetFrom(); as u) {
+        <form (ngSubmit)="savePreset(u)">
+          <p class="muted hint">Creates a new preset with the limits currently shown for <b>{{ u.name }}</b>.</p>
+          <div class="field">
+            <label for="spn">Preset name</label>
+            <input id="spn" type="text" name="spn" [(ngModel)]="presetName" maxlength="40" required />
+          </div>
+          <label class="check"><input type="checkbox" name="spf" [(ngModel)]="presetFollow" /> Make {{ u.name }} follow the new preset</label>
+          @if (error()) {
+            <p class="error">{{ error() }}</p>
+          }
+          <div class="modal-actions">
+            <button class="btn" type="button" (click)="presetFrom.set(null)">Cancel</button>
+            <button class="btn primary" type="submit" [disabled]="busy() || !presetName.trim()">Create preset</button>
+          </div>
+        </form>
+      }
+    </app-modal>
+
+    <app-modal [open]="!!restrictTarget()" [title]="restrictLive()?.restricted ? 'Restriction on ' + restrictLive()?.name : 'Restrict ' + restrictLive()?.name" (closed)="restrictTarget.set(null)">
+      @if (restrictLive(); as u) {
+        @if (!u.restricted) {
+          <p class="muted hint">The user can still sign in, but sees a red warning with your reason and cannot use the website. Running streams stop and their rooms are hidden.</p>
+          <div class="field">
+            <label for="rs">Reason (shown to them)</label>
+            <textarea id="rs" rows="3" maxlength="500" [value]="restrictReason()" (input)="restrictReason.set($any($event.target).value)"></textarea>
+          </div>
+          <label class="check"><input type="checkbox" [checked]="optChildren()" (change)="optChildren.set($any($event.target).checked)" /> Also restrict everyone they referred (and the people those referred…)</label>
+          @if (u.invitedByName) {
+            <label class="check"><input type="checkbox" [checked]="optParents()" (change)="optParents.set($any($event.target).checked)" /> Also restrict who referred them ({{ u.invitedByName }})</label>
+          }
+          <div class="modal-actions">
+            <button type="button" class="btn" (click)="restrictTarget.set(null)">Cancel</button>
+            <button type="button" class="btn danger" (click)="restrict(u)">Restrict access</button>
+          </div>
+        } @else {
+          <p><b>Reason:</b> {{ u.restrictedReason }}</p>
+          @if (u.appealStatus === 'pending') {
+            <div class="appealbox">
+              <b>Appeal from {{ u.name }}</b> <span class="muted">{{ ago(u.appealAt) }}</span>
+              <blockquote>{{ u.appealText }}</blockquote>
+              <div class="field">
+                <label for="dr">Reply if you deny it (shown to them)</label>
+                <input id="dr" type="text" maxlength="500" [value]="denyReply()" (input)="denyReply.set($any($event.target).value)" />
+              </div>
+              <button type="button" class="btn small" (click)="denyAppeal(u)">Deny appeal</button>
+              <span class="muted hint">To accept it, lift the restriction below.</span>
+            </div>
+          } @else if (u.appealStatus === 'denied') {
+            <p class="muted">Appeal denied. They can send a new one.</p>
+          }
+          @if (causedChildren(u).length > 0) {
+            <label class="check"><input type="checkbox" [checked]="optChildren()" (change)="optChildren.set($any($event.target).checked)" /> Also lift it for the {{ causedChildren(u).length }} user(s) restricted because of this one</label>
+          }
+          @if (causedParent(u); as p) {
+            <label class="check"><input type="checkbox" [checked]="optParents()" (change)="optParents.set($any($event.target).checked)" /> Also lift it for {{ p.name }}, who referred them</label>
+          }
+          <div class="modal-actions">
+            <button type="button" class="btn" (click)="restrictTarget.set(null)">Close</button>
+            <button type="button" class="btn primary" (click)="unrestrict(u)">Lift restriction</button>
+          </div>
+        }
+      }
+    </app-modal>
   `,
   styles: `
     .appealbox {
@@ -252,25 +295,24 @@ const CUSTOM = 'custom';
         width: 100%;
       }
     }
-    .restrictbox {
-      margin: 0.8rem 0;
-      padding: 0.7rem 0.9rem;
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      display: grid;
+    .head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+    .modal-actions {
+      display: flex;
+      justify-content: flex-end;
       gap: 0.5rem;
-      justify-items: start;
-      summary {
-        cursor: pointer;
-        color: #ff8b82;
-      }
-      p {
-        margin: 0;
-      }
-      textarea {
-        width: 100%;
-        min-width: 280px;
-      }
+      margin-top: 1rem;
+    }
+    .check {
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+      margin: 0.5rem 0;
     }
     .chk {
       width: 2rem;
@@ -310,6 +352,7 @@ const CUSTOM = 'custom';
 })
 export class Users implements OnInit, OnDestroy {
   private readonly api = inject(ApiService);
+  private readonly dialog = inject(DialogService);
   private readonly auth = inject(AuthService);
   private readonly router = inject(Router);
   private readonly streamer = inject(StreamerService);
@@ -323,6 +366,11 @@ export class Users implements OnInit, OnDestroy {
   protected readonly editChoice = signal('');
   protected readonly editLimits = signal<Limits | null>(null);
   protected readonly editQuota = signal(0);
+  protected readonly restrictTarget = signal<UserView | null>(null);
+  protected readonly newOpen = signal(false);
+  protected readonly presetFrom = signal<UserView | null>(null);
+  protected presetName = '';
+  protected presetFollow = true;
   protected readonly denyReply = signal('');
   protected readonly restrictReason = signal('');
   protected readonly optChildren = signal(true);
@@ -387,7 +435,7 @@ export class Users implements OnInit, OnDestroy {
     const choice = this.bulkChoice();
     if (!ids.length || !choice) return;
     const what = choice === CUSTOM ? 'these custom limits' : `the "${this.presetOf(choice)?.name}" preset`;
-    if (!confirm(`Give ${what} to ${ids.length} user(s)? Their streams pick it up right away.`)) return;
+    if (!(await this.dialog.confirm(`Give ${what} to ${ids.length} user(s)? Their streams pick it up right away.`, { title: 'Apply limits', confirmLabel: 'Apply' }))) return;
     this.busy.set(true);
     this.bulkMessage.set(null);
     const failed: string[] = [];
@@ -453,6 +501,11 @@ export class Users implements OnInit, OnDestroy {
     this.editChoice.set(CUSTOM);
   }
 
+  protected openNew(): void {
+    this.error.set(null);
+    this.newOpen.set(true);
+  }
+
   protected async create(): Promise<void> {
     this.busy.set(true);
     await this.act(async () => {
@@ -463,6 +516,7 @@ export class Users implements OnInit, OnDestroy {
       this.reveal.set({ title: `Activation key for ${this.newName.trim()}`, key: r.key, link: r.link });
       this.newName = '';
       this.newReferrals = 0;
+      this.newOpen.set(false);
     });
     this.busy.set(false);
   }
@@ -509,14 +563,60 @@ export class Users implements OnInit, OnDestroy {
     }
   }
 
+  protected openSavePreset(u: UserView): void {
+    this.error.set(null);
+    this.presetName = u.presetName ? `${u.presetName} copy`.slice(0, 40) : `${u.name}'s limits`.slice(0, 40);
+    this.presetFollow = true;
+    this.presetFrom.set(u);
+  }
+
+  /** Copies the limits shown in the user's editor (their custom values, or a preset's) into a new preset. */
+  protected async savePreset(u: UserView): Promise<void> {
+    this.busy.set(true);
+    this.error.set(null);
+    try {
+      const limits = this.editing()?.id === u.id ? this.editLimits() : u.limits;
+      const { preset } = await this.api.post<{ preset: Preset }>('/api/admin/presets', { name: this.presetName.trim(), limits });
+      if (this.presetFollow) await this.api.patch(`/api/admin/users/${u.id}`, { presetId: preset.id });
+      this.presetFrom.set(null);
+      this.editing.set(null);
+      await Promise.all([this.load(), this.loadPresets()]);
+    } catch (e: any) {
+      this.error.set(e.message);
+    } finally {
+      this.busy.set(false);
+    }
+  }
+
+  protected openRestrict(u: UserView): void {
+    this.restrictReason.set('');
+    this.denyReply.set('');
+    this.optChildren.set(true);
+    this.optParents.set(false);
+    this.restrictTarget.set(u);
+  }
+
+  /** The modal shows the latest data of its user (the list refreshes in the background). */
+  protected readonly restrictLive = computed(() => {
+    const t = this.restrictTarget();
+    return t ? (this.users().find((x) => x.id === t.id) ?? t) : null;
+  });
+
+  /** Users below this one whose restriction was caused by restricting this user. */
+  protected causedChildren(u: UserView): UserView[] {
+    return this.users().filter((x) => x.restricted && x.restrictedById === u.id && x.id !== u.invitedById);
+  }
+
+  /** The user who referred this one, if their restriction was caused by restricting this user. */
+  protected causedParent(u: UserView): UserView | undefined {
+    return this.users().find((x) => x.id === u.invitedById && x.restricted && x.restrictedById === u.id);
+  }
+
   protected restrict(u: UserView): Promise<void> {
-    const kids = this.optChildren();
-    const parents = this.optParents();
-    const what = `${u.name}${kids ? ' and everyone they referred' : ''}${parents ? ' and who referred them' : ''}`;
-    if (!confirm(`Restrict ${what}? Their streams stop right away.`)) return Promise.resolve();
     return this.act(async () => {
-      await this.api.post(`/api/admin/users/${u.id}/restrict`, { reason: this.restrictReason().trim(), children: kids, parents });
+      await this.api.post(`/api/admin/users/${u.id}/restrict`, { reason: this.restrictReason().trim(), children: this.optChildren(), parents: this.optParents() });
       this.restrictReason.set('');
+      this.restrictTarget.set(null);
       this.editing.set(null);
     });
   }
@@ -525,13 +625,17 @@ export class Users implements OnInit, OnDestroy {
     return this.act(async () => {
       await this.api.post(`/api/admin/users/${u.id}/appeal/deny`, { reply: this.denyReply().trim() });
       this.denyReply.set('');
-      this.editing.set(null);
+      this.restrictTarget.set(null);
     });
   }
 
   protected unrestrict(u: UserView): Promise<void> {
     return this.act(async () => {
-      await this.api.post(`/api/admin/users/${u.id}/unrestrict`, { children: this.optChildren(), parents: this.optParents() });
+      await this.api.post(`/api/admin/users/${u.id}/unrestrict`, {
+        children: this.causedChildren(u).length > 0 && this.optChildren(),
+        parents: !!this.causedParent(u) && this.optParents(),
+      });
+      this.restrictTarget.set(null);
       this.editing.set(null);
     });
   }
@@ -547,14 +651,19 @@ export class Users implements OnInit, OnDestroy {
     return this.act(() => this.api.patch(`/api/admin/users/${u.id}`, { status, cascade }));
   }
 
-  protected disable(u: UserView): Promise<void> {
-    if (!confirm(`Disable ${u.name}? They are signed out and their streams stop.`)) return Promise.resolve();
-    const cascade = confirm(`Also disable everyone ${u.name} invited (directly or not)?\n\nOK = yes, Cancel = only ${u.name}`);
-    return this.setStatus(u, 'disabled', cascade);
+  protected async disable(u: UserView): Promise<void> {
+    const r = await this.dialog.ask({
+      title: `Disable ${u.name}`,
+      message: `${u.name} is signed out and their streams stop.`,
+      confirmLabel: 'Disable',
+      danger: true,
+      checkbox: { label: `Also disable everyone ${u.name} invited (directly or not)` },
+    });
+    if (r.ok) await this.setStatus(u, 'disabled', r.checked);
   }
 
-  protected remove(u: UserView): Promise<void> {
-    if (!confirm(`Delete ${u.name} and all their rooms? This cannot be undone.`)) return Promise.resolve();
+  protected async remove(u: UserView): Promise<void> {
+    if (!(await this.dialog.confirm(`Delete ${u.name} and all their rooms? This cannot be undone.`, { title: `Delete ${u.name}`, confirmLabel: 'Delete', danger: true }))) return;
     return this.act(async () => {
       await this.api.delete(`/api/admin/users/${u.id}`);
       this.editing.set(null);

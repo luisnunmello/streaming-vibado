@@ -1,6 +1,7 @@
 import { Component, OnDestroy, OnInit, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ApiService } from '../../core/api.service';
+import { DialogService } from '../../core/dialog.service';
 import { RouterLink } from '@angular/router';
 import type { BandwidthView, GlobalSettings } from '../../core/models';
 
@@ -200,6 +201,7 @@ import type { BandwidthView, GlobalSettings } from '../../core/models';
 })
 export class Bandwidth implements OnInit, OnDestroy {
   private readonly api = inject(ApiService);
+  private readonly dialog = inject(DialogService);
   protected readonly view = signal<BandwidthView | null>(null);
   protected readonly draft = signal<GlobalSettings | null>(null);
   protected readonly saved = signal(false);
@@ -255,7 +257,7 @@ export class Bandwidth implements OnInit, OnDestroy {
   }
 
   protected async setPaused(paused: boolean): Promise<void> {
-    if (paused && !confirm('Stop every user stream and block new ones until you resume?')) return;
+    if (paused && !(await this.dialog.confirm('Stop every user stream and block new ones until you resume?', { title: 'Pause user streams', confirmLabel: 'Stop and block', danger: true }))) return;
     try {
       await this.api.put('/api/admin/settings', { userStreamsPaused: paused });
       await this.refresh();

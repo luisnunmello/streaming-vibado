@@ -2,6 +2,7 @@ import { Component, OnDestroy, OnInit, computed, inject, signal } from '@angular
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { ApiService } from '../../core/api.service';
+import { DialogService } from '../../core/dialog.service';
 import { AuthService } from '../../core/auth.service';
 import type { RoomView } from '../../core/models';
 import { absoluteUrl, copyText } from '../../core/util';
@@ -208,6 +209,7 @@ export class Rooms implements OnInit, OnDestroy {
 
   protected readonly auth = inject(AuthService);
   private readonly api = inject(ApiService);
+  private readonly dialog = inject(DialogService);
 
   protected readonly rooms = signal<RoomView[]>([]);
   protected readonly error = signal<string | null>(null);
@@ -285,14 +287,14 @@ export class Rooms implements OnInit, OnDestroy {
     });
   }
 
-  protected toggleVisibility(r: RoomView): Promise<void> {
+  protected async toggleVisibility(r: RoomView): Promise<void> {
     const next = r.visibility === 'public' ? 'private' : 'public';
-    if (next === 'private' && r.viewers > 0 && !confirm('Making this room private removes everyone who is watching. Continue?')) return Promise.resolve();
+    if (next === 'private' && r.viewers > 0 && !(await this.dialog.confirm('Making this room private removes everyone who is watching. Continue?', { title: 'Make room private', confirmLabel: 'Make private' }))) return;
     return this.act(() => this.api.patch(`/api/rooms/${r.id}`, { visibility: next }));
   }
 
-  protected newLink(r: RoomView): Promise<void> {
-    if (!confirm('The old link stops working and current viewers are removed. Continue?')) return Promise.resolve();
+  protected async newLink(r: RoomView): Promise<void> {
+    if (!(await this.dialog.confirm('The old link stops working and current viewers are removed. Continue?', { title: 'New secret link', confirmLabel: 'Create new link' }))) return;
     return this.act(() => this.api.patch(`/api/rooms/${r.id}`, { regenerateSecret: true }));
   }
 
@@ -300,8 +302,8 @@ export class Rooms implements OnInit, OnDestroy {
     return this.act(() => this.api.post(`/api/rooms/${r.id}/stop`));
   }
 
-  protected remove(r: RoomView): Promise<void> {
-    if (!confirm(`Delete "${r.name}"? Its link stops working.`)) return Promise.resolve();
+  protected async remove(r: RoomView): Promise<void> {
+    if (!(await this.dialog.confirm(`Delete "${r.name}"? Its link stops working.`, { title: 'Delete room', confirmLabel: 'Delete', danger: true }))) return;
     return this.act(() => this.api.delete(`/api/rooms/${r.id}`));
   }
 

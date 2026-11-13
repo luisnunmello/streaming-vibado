@@ -28,6 +28,8 @@ export interface User {
   /** Can sign in, but may not use the service; `restrictedReason` is shown to them. */
   restricted: boolean;
   restrictedReason: string;
+  /** The user whose restriction caused this one (null when restricted directly). */
+  restrictedBy: number | null;
   /** '' = no appeal, 'pending' = waiting for the admin, 'denied' = the admin said no (see appealReply). */
   appealStatus: '' | 'pending' | 'denied';
   appealText: string;
@@ -49,6 +51,7 @@ interface UserRow {
   last_seen: number | null;
   restricted: number;
   restricted_reason: string;
+  restricted_by: number | null;
   appeal_text: string;
   appeal_at: number | null;
   appeal_status: '' | 'pending' | 'denied';
@@ -99,6 +102,7 @@ const toUser = (r: UserRow): User => {
     lastSeen: r.last_seen,
     restricted: r.restricted === 1,
     restrictedReason: r.restricted_reason,
+    restrictedBy: r.restricted_by,
     appealStatus: r.appeal_status,
     appealText: r.appeal_text,
     appealAt: r.appeal_at,
@@ -126,12 +130,13 @@ export function validateName(name: unknown): string {
 /** True when the user may use the service (active and not restricted). */
 export const canUse = (u: User | undefined | null): boolean => !!u && u.status === 'active' && !u.restricted;
 
-export function setRestriction(id: number, restricted: boolean, reason = ''): void {
+export function setRestriction(id: number, restricted: boolean, reason = '', causedBy: number | null = null): void {
   // a new restriction starts without an appeal; lifting one closes any appeal
   run(
-    "UPDATE users SET restricted = ?, restricted_reason = ?, appeal_status = '', appeal_text = '', appeal_at = NULL, appeal_reply = '' WHERE id = ?",
+    "UPDATE users SET restricted = ?, restricted_reason = ?, restricted_by = ?, appeal_status = '', appeal_text = '', appeal_at = NULL, appeal_reply = '' WHERE id = ?",
     restricted ? 1 : 0,
     restricted ? reason : '',
+    restricted ? causedBy : null,
     id,
   );
 }

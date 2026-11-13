@@ -68,6 +68,7 @@ export interface UserView {
   invitedByName: string | null;
   restricted: boolean;
   restrictedReason: string;
+  restrictedById: number | null;
   appealStatus: '' | 'pending' | 'denied';
   appealText: string;
   appealAt: number | null;

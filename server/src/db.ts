@@ -141,6 +141,14 @@ if (version < 5) {
   `);
 }
 
+if (version < 6) {
+  // Who caused a restriction (set when it was applied as part of restricting someone else).
+  db.exec(`
+    ALTER TABLE users ADD COLUMN restricted_by INTEGER;
+    PRAGMA user_version = 6;
+  `);
+}
+
 export function all<T>(sql: string, ...params: SQLInputValue[]): T[] {
   return db.prepare(sql).all(...params) as T[];
 }
