@@ -5,10 +5,11 @@ import { ApiService } from '../../core/api.service';
 import { PasswordCard } from '../../admin/password-card';
 import { AuthService } from '../../core/auth.service';
 import { formatBytes } from '../../core/util';
+import { SoundSettings } from '../../shared/sound-settings';
 
 @Component({
   selector: 'app-account',
-  imports: [PasswordCard, FormsModule, TPipe],
+  imports: [PasswordCard, FormsModule, TPipe, SoundSettings],
   template: `
     <h1 class="page-title">{{ 'Account' | t }}</h1>
     <div class="layout">
@@ -31,6 +32,10 @@ import { formatBytes } from '../../core/util';
           </form>
         }
       }
+      <div class="card">
+        <h2>{{ 'Sounds' | t }}</h2>
+        <app-sound-settings />
+      </div>
       <app-password-card />
 
       @if (auth.me(); as me) {

@@ -1,4 +1,5 @@
 import { Injectable, computed, effect, inject, signal, untracked } from '@angular/core';
+import { SoundService } from './sound.service';
 import { Device, type types } from 'mediasoup-client';
 import { ApiService } from './api.service';
 import type { Limits } from './models';
@@ -38,6 +39,7 @@ export interface RoomInfo {
 /** Capture + publish the screen into a room the signed-in user owns. */
 @Injectable({ providedIn: 'root' })
 export class StreamerService {
+  private readonly sound = inject(SoundService);
   private readonly sig = inject(SignalingService);
   private readonly api = inject(ApiService);
 
@@ -193,7 +195,11 @@ export class StreamerService {
     if (!token) throw new Error('Not signed in');
     this.sig.open(token);
     this.unsubs.push(
-      this.sig.on<number>('viewerCount', (n) => this.viewers.set(n)),
+      this.sig.on<number>('viewerCount', (n) => {
+        const before = this.viewers();
+        this.viewers.set(n);
+        if (this.state() === 'live') this.sound.play(n > before ? 'viewerJoin' : n < before ? 'viewerLeave' : 'viewerJoin');
+      }),
       this.sig.on('sessionRevoked', () => {
         void this.stop(false);
         onSessionEnded();
@@ -279,6 +285,7 @@ export class StreamerService {
       await this.capture(s);
       await this.publish(s);
       this.state.set('live');
+      this.sound.play('streamStart');
       this.startStats();
     } catch (e: any) {
       if (e?.name === 'NotAllowedError') this.error.set('Screen sharing was cancelled.');
@@ -288,6 +295,7 @@ export class StreamerService {
   }
 
   async stop(notifyServer = true): Promise<void> {
+    const wasLive = this.state() === 'live';
     clearInterval(this.statsTimer);
     this.statsTimer = undefined;
     const producerIds = [this.videoProducer?.id, this.audioProducer?.id].filter((x): x is string => !!x);
@@ -319,6 +327,7 @@ export class StreamerService {
     this.hasAudio.set(false);
     this.changeRequested.set(false);
     this.state.set('idle');
+    if (wasLive) this.sound.play('streamStop');
   }
 
   // ---------------------------------------------------------------- capture

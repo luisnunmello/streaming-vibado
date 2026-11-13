@@ -7,11 +7,13 @@ import type { RoomView } from '../../core/models';
 import { I18nService, TPipe } from '../../core/i18n.service';
 import { ShareService } from '../../core/share.service';
 import { StreamerService } from '../../core/streamer.service';
+import { Modal } from '../../shared/modal';
+import { SoundSettings } from '../../shared/sound-settings';
 import { absoluteUrl, copyText } from '../../core/util';
 
 @Component({
   selector: 'app-studio',
-  imports: [StreamerPanel, RouterLink, TPipe],
+  imports: [StreamerPanel, RouterLink, TPipe, Modal, SoundSettings],
   template: `
     <div class="row head">
       <a routerLink="/dashboard/rooms" class="btn small">{{ '← Rooms' | t }}</a>
@@ -19,11 +21,16 @@ import { absoluteUrl, copyText } from '../../core/util';
         <h1>{{ i18n.roomName(r) }}</h1>
         <span class="badge" [class.good]="r.visibility === 'public'">{{ r.visibility | t }}</span>
         <span class="spacer"></span>
+        <button type="button" class="btn small" (click)="soundsOpen.set(true)">{{ 'Sounds' | t }}</button>
         <button type="button" class="btn small" (click)="copy(r)">{{ (copied() ? 'Copied!' : 'Copy viewer link') | t }}</button>
         <button type="button" class="btn small" (click)="viewHere(r)" [title]="'The stream keeps running; the page has streamer controls' | t">{{ 'View in this tab' | t }}</button>
         <a class="btn small" [href]="r.link" target="_blank" rel="noopener" [title]="'In a new tab the page controls this studio tab remotely' | t">{{ 'Open in new tab ↗' | t }}</a>
       }
     </div>
+
+    <app-modal [open]="soundsOpen()" [title]="'Sounds' | t" (closed)="soundsOpen.set(false)">
+      <app-sound-settings />
+    </app-modal>
 
     @if (loading()) {
       <p class="muted">{{ 'Joining room…' | t }}</p>
@@ -62,6 +69,7 @@ export class Studio implements OnInit, OnDestroy {
   protected readonly error = signal<string | null>(null);
   protected readonly room = signal<RoomView | null>(null);
   protected readonly copied = signal(false);
+  protected readonly soundsOpen = signal(false);
 
   async ngOnInit(): Promise<void> {
     const slug = this.route.snapshot.paramMap.get('slug') ?? '';

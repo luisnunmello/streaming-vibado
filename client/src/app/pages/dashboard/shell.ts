@@ -7,6 +7,7 @@ import { AuthService } from '../../core/auth.service';
 import { DialogService } from '../../core/dialog.service';
 import { I18nService, TPipe } from '../../core/i18n.service';
 import { ShareService } from '../../core/share.service';
+import { SoundService } from '../../core/sound.service';
 import { LangSwitch } from '../../shared/lang-switch';
 import { StreamerService } from '../../core/streamer.service';
 
@@ -40,6 +41,15 @@ import { StreamerService } from '../../core/streamer.service';
             <i></i> {{ 'LIVE' | t }} · {{ liveRoomTitle(room.name) }}
           </a>
         }
+        <button type="button" class="soundbtn" [class.muted]="sound.muted()" [attr.aria-pressed]="sound.muted()" [attr.aria-label]="(sound.muted() ? 'Sounds are muted. Click to turn them on.' : 'Mute sounds') | t" [title]="(sound.muted() ? 'Sounds are muted. Click to turn them on.' : 'Mute sounds') | t" (click)="$event.stopPropagation(); sound.toggleMuted()">
+          <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+            @if (sound.muted()) {
+              <path fill="currentColor" d="M16.5 12A4.5 4.5 0 0 0 14 7.97v2.21l2.45 2.45c.03-.2.05-.41.05-.63zM19 12c0 .94-.2 1.82-.54 2.64l1.51 1.51A8.8 8.8 0 0 0 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3 3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06a8.99 8.99 0 0 0 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4 9.91 6.09 12 8.18V4z"/>
+            } @else {
+              <path fill="currentColor" d="M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0 0 14 7.97v8.05A4.5 4.5 0 0 0 16.5 12zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
+            }
+          </svg>
+        </button>
         <app-lang-switch (click)="$event.stopPropagation()" />
         @if (auth.me()) {
           @if (auth.me()?.guest; as g) {
@@ -270,8 +280,32 @@ import { StreamerService } from '../../core/streamer.service';
     .share {
       order: 4;
     }
+    .menu .soundbtn {
+      order: 5;
+    }
     .menu app-lang-switch {
       order: 5;
+    }
+    .soundbtn {
+      display: inline-grid;
+      place-items: center;
+      width: 34px;
+      height: 34px;
+      border-radius: 8px;
+      border: 1px solid var(--line);
+      background: var(--panel-2);
+      color: var(--text);
+      cursor: pointer;
+      transition: background-color 0.15s, border-color 0.15s, color 0.15s;
+      &:hover {
+        border-color: #3a4766;
+      }
+      /* a clear red tint while muted */
+      &.muted {
+        color: #ff8b82;
+        border-color: #d92d20;
+        background: rgba(217, 45, 32, 0.22);
+      }
     }
     .menu .who {
       order: 6;
@@ -356,6 +390,13 @@ import { StreamerService } from '../../core/streamer.service';
         order: 0;
         justify-content: center;
       }
+      .menu .soundbtn {
+        order: 2;
+        align-self: flex-start;
+        width: auto;
+        padding: 0 0.9rem;
+        height: 38px;
+      }
       .menu app-lang-switch {
         order: 2;
         align-self: flex-start;
@@ -414,6 +455,7 @@ export class Shell implements OnInit, OnDestroy {
   }
   protected sharing = false;
   private readonly shareSvc = inject(ShareService);
+  protected readonly sound = inject(SoundService);
   private readonly dialog = inject(DialogService);
   private readonly i18n = inject(I18nService);
 
