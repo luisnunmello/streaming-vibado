@@ -205,6 +205,38 @@ import { StreamerService } from '../../core/streamer.service';
     .who {
       font-size: 0.9rem;
     }
+    @media (max-width: 820px) {
+      header {
+        gap: 0.5rem 0.7rem;
+        padding: 0.6rem 0.8rem;
+      }
+      /* the menu gets its own scrolling row under the brand and the buttons */
+      nav {
+        order: 10;
+        flex: 1 0 100%;
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        padding-bottom: 0.2rem;
+        a {
+          white-space: nowrap;
+          flex: 0 0 auto;
+        }
+      }
+      .who {
+        font-size: 0.82rem;
+      }
+    }
+    @media (max-width: 520px) {
+      .who:not(:has(.warn)) {
+        display: none;
+      }
+      .livechip {
+        max-width: 11rem;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+    }
     .page {
       max-width: 1300px;
     }

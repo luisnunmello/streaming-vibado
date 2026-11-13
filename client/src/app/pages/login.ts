@@ -53,6 +53,9 @@ import { Topbar } from '../shared/topbar';
     .wide {
       width: 100%;
     }
+    .remember {
+      margin: 0.2rem 0 1.1rem;
+    }
     .alt {
       margin: 1rem 0 0;
       font-size: 0.88rem;

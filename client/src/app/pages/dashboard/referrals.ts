@@ -37,7 +37,7 @@ import { absoluteUrl, copyText, dateShort } from '../../core/util';
 
     <div class="card list-card">
       <div class="table-wrap">
-        <table class="list">
+        <table class="list stack">
           <thead>
             <tr><th>{{ 'Key' | t }}</th><th>{{ 'Status' | t }}</th><th>{{ 'Expires' | t }}</th><th>{{ 'Used by' | t }}</th><th></th></tr>
           </thead>
@@ -45,11 +45,11 @@ import { absoluteUrl, copyText, dateShort } from '../../core/util';
             @for (k of keys(); track k.id) {
               <tr>
                 <td><code>••••-••••-••••-{{ k.hint }}</code></td>
-                <td>
+                <td [attr.data-label]="'Status' | t">
                   <span class="badge" [class.good]="k.status === 'used'" [class.warn]="k.status === 'unused'" [class.bad]="k.status === 'revoked' || k.status === 'expired'">{{ k.status | t }}</span>
                 </td>
-                <td class="muted">{{ k.status === 'unused' ? dateShort(k.expiresAt) : '' }}</td>
-                <td>{{ k.usedBy ?? '' }}</td>
+                <td [attr.data-label]="'Expires' | t" class="muted">{{ k.status === 'unused' ? dateShort(k.expiresAt) : '' }}</td>
+                <td [attr.data-label]="'Used by' | t">{{ k.usedBy ?? '' }}</td>
                 <td class="right">
                   @if (k.status === 'unused') {
                     <button type="button" class="btn small" (click)="revoke(k)">{{ 'Revoke' | t }}</button>

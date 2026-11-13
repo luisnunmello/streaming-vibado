@@ -100,6 +100,7 @@ a {
 
 .field {
   display: grid;
+  min-width: 0;
   gap: 0.35rem;
   margin-bottom: 0.9rem;
 
@@ -150,6 +151,8 @@ input[type='range'] {
 /* segmented control */
 .seg {
   display: flex;
+  flex-wrap: wrap; /* long labels drop to a second line instead of overflowing the card */
+  max-width: 100%;
   background: var(--bg);
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -157,7 +160,8 @@ input[type='range'] {
   gap: 3px;
 
   button {
-    flex: 1;
+    flex: 1 1 auto;
+    min-width: 0;
     padding: 0.4rem 0.5rem;
     border: 0;
     border-radius: 6px;
@@ -166,7 +170,8 @@ input[type='range'] {
     font: inherit;
     font-size: 0.88rem;
     cursor: pointer;
-    white-space: nowrap;
+    white-space: normal;
+    overflow-wrap: anywhere;
 
     &:hover:not(:disabled):not(.on) {
       color: var(--text);
@@ -383,4 +388,92 @@ textarea {
   &:disabled {
     opacity: 0.5;
   }
+}
+
+/* ---------------------------------------------------------------- small screens */
+
+/* Tables become one card per row: the cell label comes from data-label. */
+@media (max-width: 720px) {
+  table.list.stack {
+    &,
+    tbody,
+    tr,
+    td {
+      display: block;
+    }
+    thead {
+      display: none;
+    }
+    tr {
+      padding: 0.5rem 0;
+      border-bottom: 1px solid var(--line);
+    }
+    tbody tr:last-child {
+      border-bottom: 0;
+    }
+    td {
+      border: 0;
+      padding: 0.25rem 0.4rem;
+    }
+    td[data-label] {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      text-align: right;
+      &::before {
+        content: attr(data-label);
+        flex: 0 0 auto;
+        font-size: 0.72rem;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--muted);
+        text-align: left;
+      }
+    }
+    td.right,
+    td .cell-actions,
+    td .actions {
+      text-align: left;
+      justify-content: flex-start;
+    }
+    tr.edit {
+      border-bottom: 1px solid var(--line);
+      td {
+        display: block;
+        text-align: left;
+      }
+    }
+  }
+
+  .page {
+    padding: 1rem 0.8rem;
+  }
+  h1.page-title {
+    font-size: 1.25rem;
+  }
+  .head.row {
+    gap: 0.5rem;
+    > .spacer {
+      display: none;
+    }
+    > h1.page-title {
+      flex: 1 1 100%;
+    }
+  }
+  .row > .field.narrow,
+  .row > .field.grow {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+  .keybox {
+    code {
+      word-break: break-all;
+    }
+  }
+}
+
+app-limits-editor {
+  display: block;
+  margin-top: 0.8rem;
 }

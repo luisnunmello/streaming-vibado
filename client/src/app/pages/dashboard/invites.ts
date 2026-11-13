@@ -71,7 +71,7 @@ import { Modal } from '../../shared/modal';
     @if (invites().length > 0) {
       <div class="card">
         <div class="table-wrap">
-          <table class="list">
+          <table class="list stack">
             <thead>
               <tr>
                 <th>{{ 'Room' | t }}</th>
@@ -86,10 +86,10 @@ import { Modal } from '../../shared/modal';
                   <td>
                     <b>{{ i18n.roomName({ name: i.roomName, ownerName: i.ownerName, autoName: i.autoName }) }}</b>
                   </td>
-                  <td>
+                  <td [attr.data-label]="'Status' | t">
                     <span class="badge" [class.good]="i.status === 'active'" [class.warn]="i.status === 'waiting'">{{ statusLabel(i) | t }}</span>
                   </td>
-                  <td class="muted">{{ timeLabel(i) }}</td>
+                  <td [attr.data-label]="'Time' | t" class="muted">{{ timeLabel(i) }}</td>
                   <td class="right">
                     @if (i.status === 'waiting' || i.status === 'active') {
                       <button type="button" class="btn small danger" (click)="revoke(i)">{{ (i.status === 'active' ? 'End now' : 'Revoke') | t }}</button>

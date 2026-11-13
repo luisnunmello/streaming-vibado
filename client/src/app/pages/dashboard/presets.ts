@@ -51,7 +51,7 @@ import { Modal } from '../../shared/modal';
 
     <div class="card">
       <div class="table-wrap">
-        <table class="list">
+        <table class="list stack">
           <thead><tr><th>{{ 'Preset' | t }}</th><th>{{ 'Limits' | t }}</th><th>{{ 'Users' | t }}</th><th></th></tr></thead>
           <tbody>
             @for (p of presets(); track p.id) {
@@ -62,8 +62,8 @@ import { Modal } from '../../shared/modal';
                     <span class="badge good" [title]="'New users and invited users start on this preset' | t">{{ 'default' | t }}</span>
                   }
                 </td>
-                <td class="muted summary">{{ describe(p.limits) }}</td>
-                <td>{{ p.userCount }}</td>
+                <td [attr.data-label]="'Limits' | t" class="muted summary">{{ describe(p.limits) }}</td>
+                <td [attr.data-label]="'Users' | t">{{ p.userCount }}</td>
                 <td class="right">
                   <div class="cell-actions">
                     <button type="button" class="btn small" (click)="openCreate(p)">{{ 'Clone' | t }}</button>

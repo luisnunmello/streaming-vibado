@@ -53,6 +53,16 @@ import { LangSwitch } from './lang-switch';
     a.btn {
       text-decoration: none;
     }
+    @media (max-width: 560px) {
+      header {
+        flex-wrap: wrap;
+        gap: 0.5rem 0.8rem;
+        padding: 0.6rem 0.8rem;
+      }
+      nav {
+        order: 5;
+      }
+    }
   `,
 })
 export class Topbar {

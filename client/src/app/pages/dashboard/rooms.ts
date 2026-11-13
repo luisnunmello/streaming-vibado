@@ -67,7 +67,7 @@ import { absoluteUrl, copyText } from '../../core/util';
 
     <div class="card">
       <div class="table-wrap">
-        <table class="list">
+        <table class="list stack">
           <thead>
             <tr>
               <th>{{ 'Room' | t }}</th>
@@ -95,12 +95,12 @@ import { absoluteUrl, copyText } from '../../core/util';
                   }
                 </td>
                 @if (auth.isAdmin()) {
-                  <td>{{ r.ownerName }}</td>
+                  <td [attr.data-label]="'Owner' | t">{{ r.ownerName }}</td>
                 }
-                <td>
+                <td [attr.data-label]="'Access' | t">
                   <span class="badge" [class.good]="r.visibility === 'public'">{{ r.visibility | t }}</span>
                 </td>
-                <td>
+                <td [attr.data-label]="'Status' | t">
                   @if (r.live) {
                     <span class="badge live">{{ 'LIVE' | t }}</span> <span class="muted">{{ '{n} watching' | t: { n: r.viewers } }}</span>
                   } @else {

@@ -17,7 +17,7 @@ import type { LobbyRoom } from '../core/models';
       @if (rooms().length > 0) {
         <div class="card">
           <div class="table-wrap">
-            <table class="list">
+            <table class="list stack">
               <thead>
                 <tr>
                   <th>{{ 'Room' | t }}</th>
@@ -33,8 +33,8 @@ import type { LobbyRoom } from '../core/models';
                       <b>{{ i18n.roomName(r) }}</b>
                       <div class="muted slug">/r/{{ r.slug }}</div>
                     </td>
-                    <td>{{ r.ownerName }}</td>
-                    <td>
+                    <td [attr.data-label]="'Owner' | t">{{ r.ownerName }}</td>
+                    <td [attr.data-label]="'Status' | t">
                       @if (r.live) {
                         <span class="badge live">{{ 'LIVE' | t }}</span> <span class="muted">{{ '{n} watching' | t: { n: r.viewers } }}</span>
                       } @else {

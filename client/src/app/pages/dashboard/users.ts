@@ -117,7 +117,7 @@ const CUSTOM = 'custom';
 
     <div class="card">
       <div class="table-wrap">
-        <table class="list">
+        <table class="list stack">
           <thead>
             <tr>
               <th class="chk"><input type="checkbox" [attr.aria-label]="'Select all users' | t" [checked]="allSelected()" (change)="toggleAll($any($event.target).checked)" /></th><th>{{ 'User' | t }}</th><th>{{ 'Status' | t }}</th><th>{{ 'Limits' | t }}</th><th>{{ 'Referred by' | t }}</th><th>{{ 'Rooms' | t }}</th><th>{{ 'Referrals' | t }}</th><th>{{ 'This month' | t }}</th><th>{{ 'Last seen' | t }}</th><th></th>
@@ -128,7 +128,7 @@ const CUSTOM = 'custom';
               <tr>
                 <td class="chk"><input type="checkbox" [attr.aria-label]="'Select ' + u.name" [checked]="selected().has(u.id)" (change)="toggleOne(u.id, $any($event.target).checked)" /></td>
                 <td><b>{{ u.name }}</b></td>
-                <td>
+                <td [attr.data-label]="'Status' | t">
                   @if (u.restricted) {
                     <span class="badge bad" [title]="u.restrictedReason">{{ 'restricted' | t }}</span>
                   }
@@ -137,18 +137,18 @@ const CUSTOM = 'custom';
                   }
                   <span class="badge" [class.good]="u.status === 'active'" [class.warn]="u.status === 'pending'" [class.bad]="u.status === 'disabled'">{{ u.status | t }}</span>
                 </td>
-                <td>
+                <td [attr.data-label]="'Limits' | t">
                   @if (u.presetName) {
                     <span class="badge">{{ u.presetName }}</span>
                   } @else {
                     <span class="badge warn" [title]="'Not following a preset' | t">{{ 'custom' | t }}</span>
                   }
                 </td>
-                <td class="muted">{{ (u.invitedByName ?? 'Admin') | t }}</td>
-                <td>{{ u.rooms }}@if (u.liveRooms) { <span class="badge live">{{ '{n} live' | t: { n: u.liveRooms } }}</span> }</td>
-                <td>{{ u.referralsUsed }} / {{ u.referralQuota }}</td>
-                <td>{{ fmt(u.monthBytes) }}</td>
-                <td class="muted">{{ u.status === 'pending' ? ('not activated' | t) : ago(u.lastSeen) }}</td>
+                <td [attr.data-label]="'Referred by' | t" class="muted">{{ (u.invitedByName ?? 'Admin') | t }}</td>
+                <td [attr.data-label]="'Rooms' | t">{{ u.rooms }}@if (u.liveRooms) { <span class="badge live">{{ '{n} live' | t: { n: u.liveRooms } }}</span> }</td>
+                <td [attr.data-label]="'Referrals' | t">{{ u.referralsUsed }} / {{ u.referralQuota }}</td>
+                <td [attr.data-label]="'This month' | t">{{ fmt(u.monthBytes) }}</td>
+                <td [attr.data-label]="'Last seen' | t" class="muted">{{ u.status === 'pending' ? ('not activated' | t) : ago(u.lastSeen) }}</td>
                 <td class="right">
                   <button type="button" class="btn small" (click)="toggleEdit(u)">{{ (editing()?.id === u.id ? 'Close' : 'Edit') | t }}</button>
                 </td>
