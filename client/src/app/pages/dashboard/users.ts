@@ -43,12 +43,11 @@ const CUSTOM = 'custom';
             </select>
           </div>
         </div>
-        @if (newChoice() === custom) {
-          @if (newLimits(); as l) {
-            <app-limits-editor [limits]="l" (limitsChange)="newLimits.set($event)" />
-          }
-        } @else if (presetOf(newChoice()); as p) {
-          <p class="muted hint">{{ describe(p.limits) }}. <a routerLink="/dashboard/presets">Manage presets</a></p>
+        @if (presetOf(newChoice()); as p) {
+          <p class="muted hint">Follows <b>{{ p.name }}</b>. Change any value below to stop following it. <a routerLink="/dashboard/presets">Manage presets</a></p>
+        }
+        @if (newLimits(); as l) {
+          <app-limits-editor [limits]="l" (limitsChange)="editNew($event)" />
         }
         <div class="row actions">
           <button class="btn primary" type="submit" [disabled]="busy() || !newName.trim()">Create and generate key</button>
@@ -87,12 +86,11 @@ const CUSTOM = 'custom';
             </select>
           </div>
         </div>
-        @if (bulkChoice() === custom) {
-          @if (bulkLimits(); as l) {
-            <app-limits-editor [limits]="l" (limitsChange)="bulkLimits.set($event)" />
-          }
-        } @else if (presetOf(bulkChoice()); as p) {
-          <p class="muted hint">{{ describe(p.limits) }}. The selected users will follow <b>{{ p.name }}</b> from now on.</p>
+        @if (presetOf(bulkChoice()); as p) {
+          <p class="muted hint">The selected users will follow <b>{{ p.name }}</b> from now on. Change any value below to give them custom limits instead.</p>
+        }
+        @if (bulkLimits(); as l) {
+          <app-limits-editor [limits]="l" (limitsChange)="editBulk($event)" />
         }
         <div class="row actions">
           <button type="button" class="btn primary small" [disabled]="busy()" (click)="applyBulk()">Apply to {{ selected().size }} user(s)</button>
@@ -155,14 +153,13 @@ const CUSTOM = 'custom';
                           </select>
                         </div>
                       </div>
-                      @if (editChoice() === custom) {
-                        @if (editLimits(); as l) {
-                          <app-limits-editor [limits]="l" (limitsChange)="editLimits.set($event)" />
-                        }
-                      } @else if (presetOf(editChoice()); as p) {
+                      @if (presetOf(editChoice()); as p) {
                         <p class="muted hint">
-                          Follows <b>{{ p.name }}</b>: {{ describe(p.limits) }}. Changing the preset changes this user too.
+                          Follows <b>{{ p.name }}</b>: changing the preset changes this user too. Change any value below to stop following it.
                         </p>
+                      }
+                      @if (editLimits(); as l) {
+                        <app-limits-editor [limits]="l" (limitsChange)="editUser($event)" />
                       }
                       @if (u.invitedByName) {
                         <p class="muted hint">Invited by {{ u.invitedByName }}, so these limits can never go above theirs.</p>
@@ -260,7 +257,9 @@ export class Users implements OnInit, OnDestroy {
     const def = this.presets().find((p) => p.isDefault);
     if (def) {
       this.newChoice.set('' + def.id);
+      this.newLimits.set({ ...def.limits });
       this.bulkChoice.set('' + def.id);
+      this.bulkLimits.set({ ...def.limits });
     }
     this.timer = setInterval(() => void this.load(), 8000);
   }
@@ -286,10 +285,8 @@ export class Users implements OnInit, OnDestroy {
   }
 
   protected chooseBulk(choice: string): void {
-    if (choice === CUSTOM && !this.bulkLimits()) {
-      const from = this.presetOf(this.bulkChoice()) ?? this.presets().find((p) => p.isDefault);
-      if (from) this.bulkLimits.set({ ...from.limits });
-    }
+    const p = this.presetOf(choice);
+    if (p) this.bulkLimits.set({ ...p.limits });
     this.bulkChoice.set(choice);
   }
 
@@ -346,12 +343,23 @@ export class Users implements OnInit, OnDestroy {
   }
 
   protected chooseNew(choice: string): void {
-    if (choice === CUSTOM && !this.newLimits()) {
-      // start the custom limits from the preset that was selected
-      const from = this.presetOf(this.newChoice()) ?? this.presets().find((p) => p.isDefault);
-      if (from) this.newLimits.set({ ...from.limits });
-    }
+    const p = this.presetOf(choice);
+    if (p) this.newLimits.set({ ...p.limits }); // show what the preset gives; custom keeps the current values
     this.newChoice.set(choice);
+  }
+
+  /** Editing any limit by hand means the user no longer follows the preset. */
+  protected editNew(l: Limits): void {
+    this.newLimits.set(l);
+    this.newChoice.set(CUSTOM);
+  }
+  protected editBulk(l: Limits): void {
+    this.bulkLimits.set(l);
+    this.bulkChoice.set(CUSTOM);
+  }
+  protected editUser(l: Limits): void {
+    this.editLimits.set(l);
+    this.editChoice.set(CUSTOM);
   }
 
   protected async create(): Promise<void> {
@@ -380,11 +388,8 @@ export class Users implements OnInit, OnDestroy {
   }
 
   protected chooseEdit(choice: string): void {
-    if (choice === CUSTOM) {
-      // switching to custom starts from what the user has now
-      const from = this.presetOf(this.editChoice());
-      if (from) this.editLimits.set({ ...from.limits });
-    }
+    const p = this.presetOf(choice);
+    if (p) this.editLimits.set({ ...p.limits });
     this.editChoice.set(choice);
   }
 
