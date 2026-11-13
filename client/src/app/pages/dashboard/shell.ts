@@ -16,45 +16,59 @@ import { StreamerService } from '../../core/streamer.service';
   template: `
     <header>
       <a routerLink="/" class="brand">{{ 'Streaming' | t }}</a>
-      <nav>
-        <a routerLink="/dashboard/rooms" routerLinkActive="on">{{ 'Rooms' | t }}</a>
-        @if (auth.me()?.role === 'admin' || (auth.me()?.limits?.maxTempInviteMinutes ?? 0) > 0) {
-          <a routerLink="/dashboard/invites" routerLinkActive="on">{{ 'Invites' | t }}</a>
+      <div class="menu" [class.open]="menuOpen()" (click)="menuOpen.set(false)">
+        <nav>
+          <a routerLink="/dashboard/rooms" routerLinkActive="on">{{ 'Rooms' | t }}</a>
+          @if (auth.me()?.role === 'admin' || (auth.me()?.limits?.maxTempInviteMinutes ?? 0) > 0) {
+            <a routerLink="/dashboard/invites" routerLinkActive="on">{{ 'Invites' | t }}</a>
+          }
+          @if (auth.isUser() && (auth.me()?.referrals?.quota ?? 0) > 0) {
+            <a routerLink="/dashboard/referrals" routerLinkActive="on">{{ 'Referrals' | t }}</a>
+          }
+          @if (auth.isAdmin()) {
+            <a routerLink="/dashboard/users" routerLinkActive="on">{{ 'Users' | t }}@if ((auth.me()?.pendingAppeals ?? 0) > 0) { <span class="badge warn" [title]="'Appeals waiting for an answer' | t">{{ auth.me()?.pendingAppeals }}</span> }</a>
+            <a routerLink="/dashboard/presets" routerLinkActive="on">{{ 'Presets' | t }}</a>
+            <a routerLink="/dashboard/bandwidth" routerLinkActive="on">{{ 'Bandwidth' | t }}</a>
+          }
+          @if (auth.me() && auth.me()?.role !== 'guest') {
+            <a routerLink="/dashboard/account" routerLinkActive="on">{{ 'Account' | t }}</a>
+          }
+        </nav>
+        <span class="spacer"></span>
+        @if (streamer.state() === 'live' && streamer.room(); as room) {
+          <a [routerLink]="['/dashboard/rooms', room.slug]" class="livechip" [title]="'You are streaming. Click to go back to the studio.' | t">
+            <i></i> {{ 'LIVE' | t }} · {{ liveRoomTitle(room.name) }}
+          </a>
         }
-        @if (auth.isUser() && (auth.me()?.referrals?.quota ?? 0) > 0) {
-          <a routerLink="/dashboard/referrals" routerLinkActive="on">{{ 'Referrals' | t }}</a>
-        }
-        @if (auth.isAdmin()) {
-          <a routerLink="/dashboard/users" routerLinkActive="on">{{ 'Users' | t }}@if ((auth.me()?.pendingAppeals ?? 0) > 0) { <span class="badge warn" [title]="'Appeals waiting for an answer' | t">{{ auth.me()?.pendingAppeals }}</span> }</a>
-          <a routerLink="/dashboard/presets" routerLinkActive="on">{{ 'Presets' | t }}</a>
-          <a routerLink="/dashboard/bandwidth" routerLinkActive="on">{{ 'Bandwidth' | t }}</a>
-        }
-        @if (auth.me() && auth.me()?.role !== 'guest') {
-          <a routerLink="/dashboard/account" routerLinkActive="on">{{ 'Account' | t }}</a>
-        }
-      </nav>
-      <span class="spacer"></span>
-      @if (streamer.state() === 'live' && streamer.room(); as room) {
-        <a [routerLink]="['/dashboard/rooms', room.slug]" class="livechip" [title]="'You are streaming. Click to go back to the studio.' | t">
-          <i></i> {{ 'LIVE' | t }} · {{ liveRoomTitle(room.name) }}
-        </a>
-      }
-      @if (auth.me() && !auth.me()?.restricted) {
-        <button type="button" class="btn small primary" [disabled]="sharing" (click)="share()" [title]="'Go straight to your studio and pick a screen to share' | t">{{ 'Share screen' | t }}</button>
-      }
-      <app-lang-switch />
-      @if (auth.me()) {
-        @if (auth.me()?.guest; as g) {
-          <span class="who">{{ 'Guest of {name}' | t: { name: g.creatorName } }} <span class="badge warn">{{ timeLeft(g.endsAt) }}</span></span>
-          <button type="button" class="btn small" (click)="logout()">{{ 'Leave' | t }}</button>
+        <app-lang-switch (click)="$event.stopPropagation()" />
+        @if (auth.me()) {
+          @if (auth.me()?.guest; as g) {
+            <span class="who">{{ 'Guest of {name}' | t: { name: g.creatorName } }} <span class="badge warn">{{ timeLeft(g.endsAt) }}</span></span>
+            <button type="button" class="btn small out" (click)="logout()">{{ 'Leave' | t }}</button>
+          } @else {
+            <span class="who">{{ auth.me()?.name }} <span class="badge">{{ auth.me()?.role | t }}</span></span>
+            <button type="button" class="btn small out" (click)="logout()">{{ 'Sign out' | t }}</button>
+          }
         } @else {
-          <span class="who">{{ auth.me()?.name }} <span class="badge">{{ auth.me()?.role | t }}</span></span>
-          <button type="button" class="btn small" (click)="logout()">{{ 'Sign out' | t }}</button>
+          <a routerLink="/activate" class="link keyl">{{ 'Have a key?' | t }}</a>
+          <a routerLink="/login" class="btn small primary out">{{ 'Sign in' | t }}</a>
         }
-      } @else {
-        <a routerLink="/activate" class="link">{{ 'Have a key?' | t }}</a>
-        <a routerLink="/login" class="btn small primary">{{ 'Sign in' | t }}</a>
+      </div>
+      @if (auth.me() && !auth.me()?.restricted) {
+        <button type="button" class="btn small primary share" [disabled]="sharing" (click)="share()" [title]="'Go straight to your studio and pick a screen to share' | t">{{ 'Share screen' | t }}</button>
       }
+      <button type="button" class="burger" [class.open]="menuOpen()" [attr.aria-expanded]="menuOpen()" [attr.aria-label]="'Menu' | t" (click)="menuOpen.set(!menuOpen())">
+        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+          @if (menuOpen()) {
+            <path fill="currentColor" d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+          } @else {
+            <path fill="currentColor" d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/>
+          }
+        </svg>
+        @if (streamer.state() === 'live') {
+          <i class="dot" [title]="'You are streaming. Click to go back to the studio.' | t"></i>
+        }
+      </button>
     </header>
     @if (auth.adminBackup()) {
       <div class="usingbar" role="status">
@@ -205,40 +219,126 @@ import { StreamerService } from '../../core/streamer.service';
     .who {
       font-size: 0.9rem;
     }
+    header {
+      position: relative;
+    }
+    .burger {
+      display: none;
+      position: relative;
+      width: 40px;
+      height: 40px;
+      place-items: center;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel-2);
+      color: var(--text);
+      cursor: pointer;
+      .dot {
+        position: absolute;
+        top: 6px;
+        right: 6px;
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        background: #ff5b4d;
+        animation: blink 1.6s ease-in-out infinite;
+      }
+    }
+    /* Wide screens: the menu's items are part of the header row, in this order. */
+    .menu {
+      display: contents;
+    }
+    .menu nav {
+      order: 1;
+    }
+    .menu .spacer {
+      order: 2;
+    }
+    .menu .livechip {
+      order: 3;
+    }
+    .share {
+      order: 4;
+    }
+    .menu app-lang-switch {
+      order: 5;
+    }
+    .menu .who {
+      order: 6;
+    }
+    .menu .out,
+    .menu .keyl {
+      order: 7;
+    }
     @media (max-width: 820px) {
       header {
-        gap: 0.5rem 0.7rem;
-        padding: 0.6rem 0.8rem;
-      }
-      /* the menu gets its own scrolling row under the brand and the buttons */
-      nav {
-        order: 10;
-        flex: 1 0 100%;
         flex-wrap: nowrap;
-        overflow-x: auto;
-        padding-bottom: 0.2rem;
+        gap: 0.6rem;
+        padding: 0.55rem 0.8rem;
+      }
+      .share {
+        margin-left: auto;
+        order: 1;
+      }
+      .burger {
+        display: grid;
+        order: 2;
+      }
+      /* the menu drops down under the header */
+      .menu {
+        display: none;
+        position: absolute;
+        top: 100%;
+        left: 0;
+        right: 0;
+        z-index: 30;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0.7rem;
+        padding: 0.8rem;
+        border-bottom: 1px solid var(--line);
+        background: var(--panel);
+        box-shadow: 0 12px 24px rgba(0, 0, 0, 0.45);
+        max-height: calc(100dvh - 3.5rem);
+        overflow-y: auto;
+      }
+      .menu.open {
+        display: flex;
+      }
+      .menu > * {
+        order: 0;
+      }
+      .menu nav {
+        order: 1;
+        flex-direction: column;
+        flex-wrap: nowrap;
+        gap: 0.2rem;
         a {
-          white-space: nowrap;
-          flex: 0 0 auto;
+          padding: 0.65rem 0.8rem;
         }
       }
-      .who {
-        font-size: 0.82rem;
-      }
-    }
-    @media (max-width: 520px) {
-      .who:not(:has(.warn)) {
+      .menu .spacer {
         display: none;
       }
-      .livechip {
-        max-width: 11rem;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
+      .menu .livechip {
+        order: 0;
+        justify-content: center;
       }
-    }
-    .page {
-      max-width: 1300px;
+      .menu app-lang-switch {
+        order: 2;
+        align-self: flex-start;
+      }
+      .menu .who {
+        order: 3;
+      }
+      .menu .out,
+      .menu .keyl {
+        order: 4;
+        text-align: center;
+      }
+      .menu a.btn {
+        text-decoration: none;
+      }
     }
   `,
 })
@@ -267,6 +367,8 @@ export class Shell implements OnInit, OnDestroy {
   }
 
   protected tab: 'appeal' | 'account' = 'appeal';
+  /** The hamburger menu (small screens). */
+  protected readonly menuOpen = signal(false);
 
   /** A room named after its owner ("fernando's room") reads in the current language. */
   protected liveRoomTitle(name: string): string {
