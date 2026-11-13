@@ -238,8 +238,22 @@ const CUSTOM = 'custom';
             <textarea id="rs" rows="3" maxlength="500" [value]="restrictReason()" (input)="restrictReason.set($any($event.target).value)"></textarea>
           </div>
           <label class="check"><input type="checkbox" [checked]="optChildren()" (change)="optChildren.set($any($event.target).checked)" /> Also restrict everyone they referred (and the people those referred…)</label>
+          @if (optChildren()) {
+            @if (willRestrictChildren(u); as kids) {
+              <div class="chips child">@for (x of kids; track x.id) {<span class="chip">{{ x.name }}</span>}</div>
+            } @else {
+              <p class="muted hint none">Nobody to restrict here.</p>
+            }
+          }
           @if (u.invitedByName) {
             <label class="check"><input type="checkbox" [checked]="optParents()" (change)="optParents.set($any($event.target).checked)" /> Also restrict who referred them ({{ u.invitedByName }})</label>
+            @if (optParents()) {
+              @if (willRestrictParent(u); as par) {
+                <div class="chips parent">@for (x of [par]; track x.id) {<span class="chip">{{ x.name }}</span>}</div>
+              } @else {
+                <p class="muted hint none">{{ u.invitedByName }} is already restricted.</p>
+              }
+            }
           }
           <div class="modal-actions">
             <button type="button" class="btn" (click)="restrictTarget.set(null)">Cancel</button>
@@ -263,9 +277,15 @@ const CUSTOM = 'custom';
           }
           @if (causedChildren(u).length > 0) {
             <label class="check"><input type="checkbox" [checked]="optChildren()" (change)="optChildren.set($any($event.target).checked)" /> Also lift it for the {{ causedChildren(u).length }} user(s) restricted because of this one</label>
+            @if (optChildren()) {
+              <div class="chips child">@for (x of causedChildren(u); track x.id) {<span class="chip">{{ x.name }}</span>}</div>
+            }
           }
           @if (causedParent(u); as p) {
             <label class="check"><input type="checkbox" [checked]="optParents()" (change)="optParents.set($any($event.target).checked)" /> Also lift it for {{ p.name }}, who referred them</label>
+            @if (optParents()) {
+              <div class="chips parent">@for (x of [p]; track x.id) {<span class="chip">{{ x.name }}</span>}</div>
+            }
           }
           <div class="modal-actions">
             <button type="button" class="btn" (click)="restrictTarget.set(null)">Close</button>
@@ -301,6 +321,32 @@ const CUSTOM = 'custom';
       justify-content: space-between;
       gap: 1rem;
       flex-wrap: wrap;
+    }
+    .chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.3rem;
+      margin: 0 0 0.6rem 1.6rem;
+    }
+    .chip {
+      padding: 0.15rem 0.6rem;
+      border-radius: 999px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      border: 1px solid;
+    }
+    .chips.child .chip {
+      color: var(--warn);
+      border-color: var(--warn);
+      background: rgba(253, 176, 34, 0.12);
+    }
+    .chips.parent .chip {
+      color: #c4a8ff;
+      border-color: #a07cf5;
+      background: rgba(160, 124, 245, 0.14);
+    }
+    .none {
+      margin: 0 0 0.6rem 1.6rem;
     }
     .modal-actions {
       display: flex;
@@ -601,6 +647,28 @@ export class Users implements OnInit, OnDestroy {
     const t = this.restrictTarget();
     return t ? (this.users().find((x) => x.id === t.id) ?? t) : null;
   });
+
+  /** Everyone invited by `u`, directly or not, who is not restricted yet (null when nobody). */
+  protected willRestrictChildren(u: UserView): UserView[] | null {
+    const all = this.users();
+    const out: UserView[] = [];
+    const walk = (id: number): void => {
+      for (const x of all) {
+        if (x.invitedById === id) {
+          if (!x.restricted) out.push(x);
+          walk(x.id);
+        }
+      }
+    };
+    walk(u.id);
+    return out.length ? out : null;
+  }
+
+  /** The user who referred `u`, if they are not restricted yet. */
+  protected willRestrictParent(u: UserView): UserView | null {
+    const p = this.users().find((x) => x.id === u.invitedById);
+    return p && !p.restricted ? p : null;
+  }
 
   /** Users below this one whose restriction was caused by restricting this user. */
   protected causedChildren(u: UserView): UserView[] {
