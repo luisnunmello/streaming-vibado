@@ -631,6 +631,15 @@ export class StreamerService {
   private async collectStats() {
     const producer = this.videoProducer;
     if (!producer || !this.transport) return;
+    // The capture size reported at the start can be provisional (the scale factor was computed from it).
+    // When it settles on another value, rebuild the encoder parameters from the real size.
+    const track = this.displayStream?.getVideoTracks()[0];
+    const real = track?.getSettings();
+    const known = this.source();
+    if (real?.height && known && (real.height !== known.height || real.width !== known.width) && this.current) {
+      this.updateSource(track!);
+      await this.applyLive(this.current);
+    }
     try {
       const [report, transportReport] = await Promise.all([producer.getStats(), this.transport.getStats()]);
       const outs: any[] = [];
