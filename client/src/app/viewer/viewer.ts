@@ -1,4 +1,4 @@
-import { Component, ElementRef, OnDestroy, OnInit, computed, inject, signal, viewChild } from '@angular/core';
+import { Component, ElementRef, OnDestroy, OnInit, computed, effect, inject, signal, viewChild } from '@angular/core';
 import { I18nService, TPipe } from '../core/i18n.service';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { Subscription, combineLatest } from 'rxjs';
@@ -53,6 +53,14 @@ export class Viewer implements OnInit, OnDestroy {
   ];
   private hideTimer?: ReturnType<typeof setTimeout>;
   private sub?: Subscription;
+
+  /** Every new track: make sure the element is playing (it can stay black after tracks arrive late). */
+  private readonly replay = effect(() => {
+    if (!this.v.trackCount()) return;
+    const el = this.video().nativeElement;
+    if (el.srcObject !== this.v.stream) el.srcObject = this.v.stream;
+    el.play().catch(() => undefined);
+  });
 
   ngOnInit(): void {
     this.sub = combineLatest([this.route.paramMap, this.route.queryParamMap]).subscribe(([params, query]) => {

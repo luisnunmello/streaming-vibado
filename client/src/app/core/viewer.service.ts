@@ -35,6 +35,8 @@ export class ViewerService {
   readonly quality = signal<Quality>('auto');
   /** The element's srcObject; stays the same object for the whole session. */
   readonly stream = new MediaStream();
+  /** Counts tracks added to the stream, so the page can make sure the element plays them. */
+  readonly trackCount = signal(0);
 
   private slug = '';
   private key: string | undefined;
@@ -48,6 +50,10 @@ export class ViewerService {
   private generation = 0;
   private blocked = false;
   private pausedSent = false;
+  /** Producers being consumed or already consumed (a producer can be announced and listed at once). */
+  private consuming = new Set<string>();
+  /** Seconds the video has had no decoded frame. */
+  private stalled = 0;
   private last = { bytes: 0, at: 0, lost: 0, received: 0 };
 
   private readonly onVisibility = () => {
@@ -133,6 +139,8 @@ export class ViewerService {
     this.layers.set(1);
     this.stats.set(null);
     this.pausedSent = false;
+    this.consuming.clear();
+    this.stalled = 0;
   }
 
   private async setup(): Promise<void> {
@@ -204,6 +212,8 @@ export class ViewerService {
     const transport = this.transport;
     const device = this.device;
     if (!transport || !device || gen !== this.generation) return;
+    if (this.consuming.has(producerId)) return; // already on its way: two tracks of one video show black
+    this.consuming.add(producerId);
     try {
       const data = await this.sig.request<any>('consume', {
         transportId: transport.id,
@@ -219,6 +229,7 @@ export class ViewerService {
       });
       this.consumers.set(consumer.id, consumer);
       this.stream.addTrack(consumer.track);
+      this.trackCount.update((n) => n + 1);
       if (consumer.kind === 'audio') this.hasAudio.set(true);
       if (consumer.kind === 'video') {
         this.layers.set(data.spatialLayers ?? 1);
@@ -228,6 +239,7 @@ export class ViewerService {
       this.error.set(null);
       this.problem.set(null);
     } catch (e: any) {
+      if (gen === this.generation) this.consuming.delete(producerId);
       const message: string = e?.message ?? 'Could not play the stream';
       this.error.set(message);
       if (/full|capacity/i.test(message)) {
@@ -238,6 +250,7 @@ export class ViewerService {
   }
 
   private removeByProducer(producerId: string): void {
+    this.consuming.delete(producerId);
     for (const [id, c] of this.consumers) {
       if (c.producerId === producerId) {
         this.stream.removeTrack(c.track);
@@ -252,7 +265,10 @@ export class ViewerService {
 
   private async collectStats(): Promise<void> {
     const video = [...this.consumers.values()].find((c) => c.kind === 'video');
-    if (!video) return;
+    if (!video) {
+      this.stalled = 0;
+      return;
+    }
     try {
       const report = await video.getStats();
       let inbound: any;
@@ -260,6 +276,15 @@ export class ViewerService {
         if (r.type === 'inbound-rtp' && r.kind === 'video') inbound = r;
       });
       if (!inbound) return;
+      // Black screen watchdog: connected but no frame decoded. Ask for a keyframe, then start over.
+      if (this.live() && !inbound.framesDecoded) {
+        this.stalled++;
+        if (this.stalled === 3 || this.stalled === 6) this.sig.request('requestKeyFrame', { consumerId: video.id }).catch(() => undefined);
+        if (this.stalled >= 10) {
+          this.stalled = 0;
+          this.scheduleRetry(0);
+        }
+      } else this.stalled = 0;
       const now = performance.now();
       const dt = now - this.last.at;
       const bitrateKbps = this.last.at ? ((inbound.bytesReceived - this.last.bytes) * 8) / dt : 0;
