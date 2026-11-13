@@ -1,6 +1,8 @@
 /** Portuguese (Brazil) translations; the key is the English text. Missing keys simply show in English. */
 export const PT: Record<string, string> = {
   // ---- general
+  'Screen sharing works best in a Chromium browser.': 'O compartilhamento de tela funciona melhor em um navegador Chromium.',
+  'Chrome, Edge, Brave or Opera are recommended. Other browsers, such as Firefox, have many limitations: no audio capture, no window-only audio, and some options do not work.': 'Chrome, Edge, Brave ou Opera são recomendados. Outros navegadores, como o Firefox, têm muitas limitações: sem captura de áudio, sem áudio só da janela e algumas opções não funcionam.',
   'You have reached your room limit.': 'Você atingiu o seu limite de salas.',
   'Your room is named after you:': 'Sua sala tem o seu nome:',
   'Watch': 'Assistir',

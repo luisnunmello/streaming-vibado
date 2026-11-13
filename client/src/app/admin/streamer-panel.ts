@@ -3,11 +3,12 @@ import { TPipe } from '../core/i18n.service';
 import { localControls } from '../core/stream-controls';
 import { StreamerService } from '../core/streamer.service';
 import { CODECS, type AudioMode, type Preset, type StreamSettings, fpsOptions, isPresetActive, resolutionOptions } from '../core/stream-settings';
+import { BrowserWarning } from '../shared/browser-warning';
 import { ControlBar } from '../shared/control-bar';
 
 @Component({
   selector: 'app-streamer-panel',
-  imports: [ControlBar, TPipe],
+  imports: [BrowserWarning, ControlBar, TPipe],
   templateUrl: './streamer-panel.html',
   styleUrl: './streamer-panel.scss',
   host: { '(document:fullscreenchange)': 'onFullscreenChange()' },
