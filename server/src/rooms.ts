@@ -90,11 +90,11 @@ export const countRooms = (ownerId: number | null): number =>
     ? get<{ n: number }>('SELECT COUNT(*) AS n FROM rooms WHERE owner_id IS NULL')!.n
     : get<{ n: number }>('SELECT COUNT(*) AS n FROM rooms WHERE owner_id = ?', ownerId)!.n;
 
-/** Public rooms whose owner is the admin or an active guest. */
+/** Public rooms whose owner is the admin or an active user. */
 export function listPublicRooms(): (Room & { ownerName: string })[] {
   const rows = all<RoomRow & { owner_name: string | null; owner_status: string | null }>(
     `SELECT r.*, g.name AS owner_name, g.status AS owner_status
-     FROM rooms r LEFT JOIN guests g ON g.id = r.owner_id
+     FROM rooms r LEFT JOIN users g ON g.id = r.owner_id
      WHERE r.visibility = 'public' AND (r.owner_id IS NULL OR g.status = 'active')
      ORDER BY r.created_at`,
   );

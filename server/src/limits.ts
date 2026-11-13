@@ -1,6 +1,6 @@
 import { HttpError } from './errors.js';
 
-/** What a guest account is allowed to do. Enforced on the server. */
+/** What a user account is allowed to do. Enforced on the server. */
 export interface Limits {
   maxRooms: number;
   /** Rooms that may be live at the same time. */
@@ -75,7 +75,7 @@ export function parseStoredLimits(json: string): Limits {
 const unlimited = (n: number) => (n === 0 ? Infinity : n);
 const back = (n: number) => (n === Infinity ? 0 : n);
 
-/** Invited guests can never get more than the guest who invited them. */
+/** Invited users can never get more than the user who invited them. */
 export function clampToParent(child: Limits, parent: Limits): Limits {
   return {
     maxRooms: Math.min(child.maxRooms, parent.maxRooms),

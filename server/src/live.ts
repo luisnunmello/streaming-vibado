@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import type { Server, Socket } from 'socket.io';
 import type { types } from 'mediasoup';
-import { getGuest, monthlyBytes } from './accounts.js';
+import { getUser, monthlyBytes } from './accounts.js';
 import type { BudgetManager } from './budget.js';
 import { config } from './config.js';
 import { getSession, onRevoke, type Principal } from './auth.js';
@@ -87,7 +87,7 @@ export class LiveService {
     return { live: this.isLive(rt), viewers: rt?.viewerIds.size ?? 0 };
   }
 
-  /** Spatial layer cap the viewers of this room currently get (budget pressure lowers it for guests). */
+  /** Spatial layer cap the viewers of this room currently get (budget pressure lowers it for users). */
   layerCapFor(rt: RoomRuntime): number {
     return rt.room.ownerId === null ? 2 : this.budget.layerCap;
   }
@@ -122,10 +122,54 @@ export class LiveService {
     this.maybeDestroy(rt);
   }
 
-  stopGuestStreams(reason: string, guestId?: number): void {
+  /** Ends the stream when `maxMinutes` have passed since it started (0 = no limit). */
+  private scheduleTimeLimit(rt: RoomRuntime, maxMinutes: number): void {
+    clearTimeout(rt.endTimer);
+    rt.endTimer = undefined;
+    if (maxMinutes <= 0 || !rt.startedAt) return;
+    const left = maxMinutes * 60_000 - (Date.now() - rt.startedAt);
+    if (left <= 0) {
+      this.endStream(rt, `Time limit of ${maxMinutes} minutes reached`);
+      return;
+    }
+    rt.endTimer = setTimeout(() => this.endStream(rt, `Time limit of ${maxMinutes} minutes reached`), left);
+  }
+
+  /**
+   * Called when a user's limits changed (preset edited, preset switched, limits edited, inviter changed):
+   * tells every page that user has open, and applies the new limits to what is live right now.
+   */
+  refreshLimits(userId: number): void {
+    const user = getUser(userId);
+    if (!user) return;
+    const limits = user.limits;
+    this.io.to(`u:${userId}`).emit('limits', { limits });
+
+    const rooms = [...this.runtimes.values()].filter((rt) => rt.room.ownerId === userId);
+    for (const rt of rooms) {
+      // ceiling on what the connection may carry, as when it was created
+      const cap = Math.round(limits.maxBitrateMbps * 1.7e6 + 0.3e6);
+      for (const t of rt.ownerTransports.values()) t.transport.setMaxIncomingBitrate(cap).catch(() => undefined);
+      if (!limits.allowAudio) {
+        for (const p of [...rt.producers.values()]) {
+          if (p.kind !== 'audio') continue;
+          p.close();
+          this.io.to(`o:${rt.room.id}`).emit('limitsEnforced', { kind: 'audio', message: 'Audio was turned off: your account no longer allows it.' });
+        }
+      }
+      if (this.isLive(rt)) this.scheduleTimeLimit(rt, limits.maxStreamMinutes);
+    }
+    // fewer simultaneous streams allowed than are running: the most recently started ones end
+    const running = rooms.filter((rt) => this.isLive(rt)).sort((a, b) => (b.startedAt ?? 0) - (a.startedAt ?? 0));
+    while (running.length > limits.maxStreams) {
+      this.endStream(running.shift()!, `Your limit was lowered to ${limits.maxStreams} simultaneous stream(s)`);
+    }
+  }
+
+  stopUserStreams(reason: string, userId?: number): void {
     for (const rt of [...this.runtimes.values()]) {
       if (rt.room.ownerId === null) continue;
-      if (guestId !== undefined && rt.room.ownerId !== guestId) continue;
+      if (userId !== undefined && rt.room.ownerId !== userId) continue;
       if (this.isLive(rt)) this.endStream(rt, reason);
     }
   }
@@ -184,6 +228,8 @@ export class LiveService {
       socket.join('admin');
       socket.emit('bandwidth', this.budget.view());
     }
+    // Every page a user has open hears about changes to their limits.
+    if (principal?.role === 'user') socket.join(`u:${principal.userId}`);
 
     const on = (event: string, fn: (data: any) => Promise<Record<string, unknown> | void> | Record<string, unknown> | void) => {
       socket.on(event, async (data: any, ack?: Ack) => {
@@ -220,7 +266,7 @@ export class LiveService {
 
     on('createTransport', async ({ direction }: { direction: 'send' | 'recv' }) => {
       const rt = direction === 'send' ? needOwner() : joined();
-      const guest = rt.room.ownerId === null ? null : getGuest(rt.room.ownerId);
+      const user = rt.room.ownerId === null ? null : getUser(rt.room.ownerId);
       const t = await rt.router.createWebRtcTransport({
         webRtcServer: this.sfu.webRtcServer,
         enableUdp: true,
@@ -231,7 +277,7 @@ export class LiveService {
       if (direction === 'send') {
         // Hard cap on what this streamer can push, whatever their browser claims. The allowance covers
         // the extra simulcast layers and audio on top of the main stream.
-        const cap = guest ? Math.round(guest.limits.maxBitrateMbps * 1.7e6 + 0.3e6) : config.rtc.maxIncomingBitrate;
+        const cap = user ? Math.round(user.limits.maxBitrateMbps * 1.7e6 + 0.3e6) : config.rtc.maxIncomingBitrate;
         await t.setMaxIncomingBitrate(cap);
       }
       peer.transports.set(t.id, t);
@@ -257,10 +303,10 @@ export class LiveService {
       const rt = needOwner();
       if (kind !== 'video' && kind !== 'audio') throw new ClientError('Invalid kind');
       if ([...rt.producers.values()].some((p) => p.kind === kind)) throw new ClientError(`This room already has a ${kind} stream`);
-      const guest = rt.room.ownerId === null ? null : getGuest(rt.room.ownerId);
-      if (rt.room.ownerId !== null && guest?.status !== 'active') throw new ClientError('Account disabled');
-      if (kind === 'audio' && guest && !guest.limits.allowAudio) throw new ClientError('Audio is not allowed for your account');
-      if (kind === 'video') this.checkCanStart(rt, guest?.limits ?? null, guest?.id ?? null);
+      const user = rt.room.ownerId === null ? null : getUser(rt.room.ownerId);
+      if (rt.room.ownerId !== null && user?.status !== 'active') throw new ClientError('Account disabled');
+      if (kind === 'audio' && user && !user.limits.allowAudio) throw new ClientError('Audio is not allowed for your account');
+      if (kind === 'video') this.checkCanStart(rt, user?.limits ?? null, user?.id ?? null);
 
       const producer = await transportOf(transportId).produce({
         kind,
@@ -283,10 +329,7 @@ export class LiveService {
       if (kind === 'video') {
         rt.startedAt = Date.now();
         rt.idleSince = rt.viewerIds.size === 0 ? Date.now() : null;
-        const maxMin = guest?.limits.maxStreamMinutes ?? 0;
-        if (maxMin > 0) {
-          rt.endTimer = setTimeout(() => this.endStream(rt, `Time limit of ${maxMin} minutes reached`), maxMin * 60_000);
-        }
+        this.scheduleTimeLimit(rt, user?.limits.maxStreamMinutes ?? 0);
       }
       this.io.to(`v:${rt.room.id}`).emit('newProducer', { producerId: producer.id, kind });
       this.broadcastState(rt);
@@ -369,10 +412,10 @@ export class LiveService {
     if (typeof d.slug !== 'string') throw new ClientError('Room not found');
     const room = getRoomBySlug(d.slug);
     const p = peer.principal;
-    const owner = !!room && !!p && ((p.role === 'admin' && room.ownerId === null) || (p.role === 'guest' && p.guestId === room.ownerId));
-    const ownerGuest = room?.ownerId != null ? getGuest(room.ownerId) : undefined;
+    const owner = !!room && !!p && ((p.role === 'admin' && room.ownerId === null) || (p.role === 'user' && p.userId === room.ownerId));
+    const ownerUser = room?.ownerId != null ? getUser(room.ownerId) : undefined;
 
-    let allowed = !!room && (room.ownerId === null || ownerGuest?.status === 'active');
+    let allowed = !!room && (room.ownerId === null || ownerUser?.status === 'active');
     if (room && allowed && !owner && room.visibility === 'private') {
       const given = Buffer.from(typeof d.key === 'string' ? d.key : '');
       const real = Buffer.from(room.secret);
@@ -411,7 +454,7 @@ export class LiveService {
       rt.ownerSocketId = peer.socket.id;
       peer.socket.join(`o:${room.id}`);
     } else {
-      const maxViewers = ownerGuest ? ownerGuest.limits.maxViewersPerRoom : Infinity;
+      const maxViewers = ownerUser ? ownerUser.limits.maxViewersPerRoom : Infinity;
       if (rt.viewerIds.size >= maxViewers) {
         this.maybeDestroy(rt);
         throw new ClientError('This room is full');
@@ -433,11 +476,11 @@ export class LiveService {
     this.emitViewerCount(rt);
 
     return {
-      room: { slug: room.slug, name: room.name, visibility: room.visibility, ownerName: ownerGuest?.name ?? 'Admin' },
+      room: { slug: room.slug, name: room.name, visibility: room.visibility, ownerName: ownerUser?.name ?? 'Admin' },
       role: owner ? 'owner' : 'viewer',
       live: this.isLive(rt),
       rtpCapabilities: rt.router.rtpCapabilities,
-      limits: owner ? (ownerGuest?.limits ?? null) : undefined,
+      limits: owner ? (ownerUser?.limits ?? null) : undefined,
     };
   }
 
@@ -489,13 +532,13 @@ export class LiveService {
     this.io.to(`o:${rt.room.id}`).emit('viewerCount', rt.viewerIds.size);
   }
 
-  private checkCanStart(rt: RoomRuntime, limits: Limits | null, guestId: number | null): void {
-    if (guestId === null || !limits) return; // the admin's own streams are never refused here
+  private checkCanStart(rt: RoomRuntime, limits: Limits | null, userId: number | null): void {
+    if (userId === null || !limits) return; // the admin's own streams are never refused here
     const g = getGlobals();
-    if (g.guestStreamsPaused) throw new ClientError('Guest streaming is paused by the admin right now');
-    const liveRooms = [...this.runtimes.values()].filter((r) => r !== rt && r.room.ownerId === guestId && this.isLive(r)).length;
+    if (g.userStreamsPaused) throw new ClientError('User streaming is paused by the admin right now');
+    const liveRooms = [...this.runtimes.values()].filter((r) => r !== rt && r.room.ownerId === userId && this.isLive(r)).length;
     if (liveRooms >= limits.maxStreams) throw new ClientError(`You can only stream in ${limits.maxStreams} room(s) at the same time`);
-    if (limits.monthlyGb > 0 && monthlyBytes(guestId) >= limits.monthlyGb * 1e9) throw new ClientError('Your monthly traffic quota is used up');
+    if (limits.monthlyGb > 0 && monthlyBytes(userId) >= limits.monthlyGb * 1e9) throw new ClientError('Your monthly traffic quota is used up');
     if (!this.budget.admitStream(limits.maxBitrateMbps * 1e6)) throw new ClientError('The server cannot take another stream right now. Please try again later.');
   }
 

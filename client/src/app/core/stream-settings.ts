@@ -90,7 +90,7 @@ export function loadSettings(defaults: Partial<StreamSettings> = {}): StreamSett
   }
 }
 
-/** Brings settings inside a guest's limits (the server enforces them too). */
+/** Brings settings inside a user's limits (the server enforces them too). */
 export function clampSettings(s: StreamSettings, limits: Limits | null): StreamSettings {
   if (!limits) return s;
   return {

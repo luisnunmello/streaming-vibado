@@ -1,10 +1,11 @@
 import { Routes } from '@angular/router';
-import { adminGuard, authGuard, guestGuard } from './core/guards';
+import { adminGuard, authGuard, userGuard } from './core/guards';
 import { Activate } from './pages/activate';
 import { Account } from './pages/dashboard/account';
 import { Bandwidth } from './pages/dashboard/bandwidth';
-import { Guests } from './pages/dashboard/guests';
+import { Users } from './pages/dashboard/users';
 import { Referrals } from './pages/dashboard/referrals';
+import { Presets } from './pages/dashboard/presets';
 import { Rooms } from './pages/dashboard/rooms';
 import { Shell } from './pages/dashboard/shell';
 import { Studio } from './pages/dashboard/studio';
@@ -28,9 +29,10 @@ export const routes: Routes = [
       { path: '', pathMatch: 'full', redirectTo: 'rooms' },
       { path: 'rooms', component: Rooms },
       { path: 'rooms/:slug', component: Studio },
-      { path: 'referrals', component: Referrals, canActivate: [guestGuard] },
+      { path: 'referrals', component: Referrals, canActivate: [userGuard] },
       { path: 'account', component: Account },
-      { path: 'guests', component: Guests, canActivate: [adminGuard] },
+      { path: 'users', component: Users, canActivate: [adminGuard] },
+      { path: 'presets', component: Presets, canActivate: [adminGuard] },
       { path: 'bandwidth', component: Bandwidth, canActivate: [adminGuard] },
     ],
   },

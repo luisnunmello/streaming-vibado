@@ -1,21 +1,25 @@
 import { all, currentMonth, get, run, tx } from './db.js';
 import { HttpError } from './errors.js';
-import { getGlobals } from './globals.js';
 import { hashKey, keyHint, newKey, normalizeKey } from './keys.js';
 import { clampToParent, parseStoredLimits, sanitizeLimits, type Limits } from './limits.js';
 import { checkNewPassword, hashPassword, verifyStoredPassword } from './password.js';
+import { defaultPreset, getPreset } from './presets.js';
 
 const DAY = 24 * 60 * 60 * 1000;
 const ACTIVATION_TTL = 7 * DAY;
 const REFERRAL_TTL = 14 * DAY;
 
-export type GuestStatus = 'pending' | 'active' | 'disabled';
+export type UserStatus = 'pending' | 'active' | 'disabled';
 
-export interface Guest {
+export interface User {
   id: number;
   name: string;
-  status: GuestStatus;
+  status: UserStatus;
+  /** What the user may do right now: their preset (or custom limits), never above the inviter's. */
   limits: Limits;
+  /** The preset the user follows, or null for custom limits. */
+  presetId: number | null;
+  presetName: string | null;
   referralQuota: number;
   invitedBy: number | null;
   createdAt: number;
@@ -23,12 +27,13 @@ export interface Guest {
   lastSeen: number | null;
 }
 
-interface GuestRow {
+interface UserRow {
   id: number;
   name: string;
   password: string | null;
-  status: GuestStatus;
+  status: UserStatus;
   limits: string;
+  preset_id: number | null;
   referral_quota: number;
   invited_by: number | null;
   created_at: number;
@@ -40,7 +45,7 @@ interface KeyRow {
   id: number;
   hash: string;
   kind: 'activation' | 'referral';
-  guest_id: number;
+  user_id: number;
   hint: string;
   created_at: number;
   expires_at: number;
@@ -49,24 +54,44 @@ interface KeyRow {
   revoked: number;
 }
 
-const toGuest = (r: GuestRow): Guest => ({
-  id: r.id,
-  name: r.name,
-  status: r.status,
-  limits: parseStoredLimits(r.limits),
-  referralQuota: r.referral_quota,
-  invitedBy: r.invited_by,
-  createdAt: r.created_at,
-  activatedAt: r.activated_at,
-  lastSeen: r.last_seen,
-});
+/** Limits before the inviter's ceiling is applied: the linked preset, or the user's own custom values. */
+function baseLimitsOf(r: UserRow): { limits: Limits; presetName: string | null } {
+  if (r.preset_id) {
+    const p = getPreset(r.preset_id);
+    if (p) return { limits: p.limits, presetName: p.name };
+  }
+  return { limits: parseStoredLimits(r.limits), presetName: null };
+}
 
-export const getGuest = (id: number): Guest | undefined => {
-  const r = get<GuestRow>('SELECT * FROM guests WHERE id = ?', id);
-  return r && toGuest(r);
+const toUser = (r: UserRow): User => {
+  const base = baseLimitsOf(r);
+  let limits = base.limits;
+  if (r.invited_by) {
+    // Invited users never get more than the user who invited them (inviters are never invited themselves).
+    const inviter = get<UserRow>('SELECT * FROM users WHERE id = ?', r.invited_by);
+    if (inviter) limits = clampToParent(limits, baseLimitsOf(inviter).limits);
+  }
+  return {
+    id: r.id,
+    name: r.name,
+    status: r.status,
+    limits,
+    presetId: base.presetName ? r.preset_id : null,
+    presetName: base.presetName,
+    referralQuota: r.referral_quota,
+    invitedBy: r.invited_by,
+    createdAt: r.created_at,
+    activatedAt: r.activated_at,
+    lastSeen: r.last_seen,
+  };
 };
 
-export const listGuests = (): Guest[] => all<GuestRow>('SELECT * FROM guests ORDER BY created_at DESC').map(toGuest);
+export const getUser = (id: number): User | undefined => {
+  const r = get<UserRow>('SELECT * FROM users WHERE id = ?', id);
+  return r && toUser(r);
+};
+
+export const listUsers = (): User[] => all<UserRow>('SELECT * FROM users ORDER BY created_at DESC').map(toUser);
 
 export function validateName(name: unknown): string {
   if (typeof name !== 'string') throw new HttpError(400, 'A name is required');
@@ -79,18 +104,18 @@ export function validateName(name: unknown): string {
 }
 
 function ensureNameFree(name: string): void {
-  if (get('SELECT 1 FROM guests WHERE name = ?', name)) throw new HttpError(409, 'That name is already taken');
+  if (get('SELECT 1 FROM users WHERE name = ?', name)) throw new HttpError(409, 'That name is already taken');
 }
 
-function insertKey(kind: 'activation' | 'referral', guestId: number, ttl: number): { key: string; expiresAt: number } {
+function insertKey(kind: 'activation' | 'referral', userId: number, ttl: number): { key: string; expiresAt: number } {
   const key = newKey();
   const now = Date.now();
   const expiresAt = now + ttl;
   run(
-    'INSERT INTO keys (hash, kind, guest_id, hint, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?)',
+    'INSERT INTO keys (hash, kind, user_id, hint, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?)',
     hashKey(key),
     kind,
-    guestId,
+    userId,
     keyHint(key),
     now,
     expiresAt,
@@ -100,41 +125,65 @@ function insertKey(kind: 'activation' | 'referral', guestId: number, ttl: number
 
 // ---------------------------------------------------------------- admin: create / edit
 
-export function createGuest(nameInput: unknown, referralQuota: unknown, limitsInput: unknown) {
+/** New user. They follow `presetId` (default preset if omitted), unless custom `limits` are given. */
+export function createUser(nameInput: unknown, referralQuota: unknown, opts: { presetId?: unknown; limits?: unknown } = {}) {
   const name = validateName(nameInput);
   const quota = Number(referralQuota ?? 0);
   if (!Number.isInteger(quota) || quota < 0 || quota > 1000) throw new HttpError(400, 'referralQuota must be a whole number from 0 to 1000');
-  const limits = sanitizeLimits(limitsInput, getGlobals().defaultLimits);
+  let presetId: number | null = null;
+  let limits: Limits;
+  if (opts.limits !== undefined && opts.limits !== null) {
+    limits = sanitizeLimits(opts.limits, defaultPreset().limits);
+  } else {
+    const preset = opts.presetId === undefined || opts.presetId === null ? defaultPreset() : getPreset(Number(opts.presetId));
+    if (!preset) throw new HttpError(404, 'Preset not found');
+    presetId = preset.id;
+    limits = preset.limits;
+  }
   return tx(() => {
     ensureNameFree(name);
     const { id } = run(
-      "INSERT INTO guests (name, status, limits, referral_quota, created_at) VALUES (?, 'pending', ?, ?, ?)",
+      "INSERT INTO users (name, status, limits, preset_id, referral_quota, created_at) VALUES (?, 'pending', ?, ?, ?, ?)",
       name,
       JSON.stringify(limits),
+      presetId,
       quota,
       Date.now(),
     );
     const { key, expiresAt } = insertKey('activation', id, ACTIVATION_TTL);
-    return { guest: getGuest(id)!, key, expiresAt };
+    return { user: getUser(id)!, key, expiresAt };
   });
 }
 
-/** New activation key for a guest: used for first activation and for password resets. */
-export function reissueActivationKey(guestId: number) {
-  const guest = getGuest(guestId);
-  if (!guest) throw new HttpError(404, 'Guest not found');
-  if (guest.status === 'disabled') throw new HttpError(409, 'Enable the guest first');
+/** New activation key for a user: used for first activation and for password resets. */
+export function reissueActivationKey(userId: number) {
+  const user = getUser(userId);
+  if (!user) throw new HttpError(404, 'User not found');
+  if (user.status === 'disabled') throw new HttpError(409, 'Enable the user first');
   return tx(() => {
-    run("UPDATE keys SET revoked = 1 WHERE guest_id = ? AND kind = 'activation' AND used_at IS NULL", guestId);
-    return insertKey('activation', guestId, ACTIVATION_TTL);
+    run("UPDATE keys SET revoked = 1 WHERE user_id = ? AND kind = 'activation' AND used_at IS NULL", userId);
+    return insertKey('activation', userId, ACTIVATION_TTL);
   });
 }
 
-export function updateGuest(id: number, patch: Record<string, unknown>): Guest {
-  const guest = getGuest(id);
-  if (!guest) throw new HttpError(404, 'Guest not found');
-  let { limits, referralQuota, status } = guest;
-  if (patch['limits'] !== undefined) limits = sanitizeLimits(patch['limits'], guest.limits);
+export function updateUser(id: number, patch: Record<string, unknown>): User {
+  const user = getUser(id);
+  if (!user) throw new HttpError(404, 'User not found');
+  let { limits, referralQuota, status, presetId } = user;
+  if (patch['presetId'] !== undefined) {
+    if (patch['presetId'] === null) {
+      presetId = null; // stop following the preset; keep today's limits as custom values
+    } else {
+      const preset = getPreset(Number(patch['presetId']));
+      if (!preset) throw new HttpError(404, 'Preset not found');
+      presetId = preset.id;
+      limits = preset.limits;
+    }
+  }
+  if (patch['limits'] !== undefined) {
+    limits = sanitizeLimits(patch['limits'], limits);
+    presetId = null; // editing limits by hand makes them custom
+  }
   if (patch['referralQuota'] !== undefined) {
     const q = Number(patch['referralQuota']);
     if (!Number.isInteger(q) || q < 0 || q > 1000) throw new HttpError(400, 'referralQuota must be a whole number from 0 to 1000');
@@ -142,22 +191,27 @@ export function updateGuest(id: number, patch: Record<string, unknown>): Guest {
   }
   if (patch['status'] !== undefined) {
     if (patch['status'] !== 'active' && patch['status'] !== 'disabled') throw new HttpError(400, 'status must be "active" or "disabled"');
-    if (guest.status === 'pending') throw new HttpError(409, 'The guest has not activated the account yet');
+    if (user.status === 'pending') throw new HttpError(409, 'The user has not activated the account yet');
     status = patch['status'];
   }
-  run('UPDATE guests SET limits = ?, referral_quota = ?, status = ? WHERE id = ?', JSON.stringify(limits), referralQuota, status, id);
-  return getGuest(id)!;
+  run('UPDATE users SET limits = ?, preset_id = ?, referral_quota = ?, status = ? WHERE id = ?', JSON.stringify(limits), presetId, referralQuota, status, id);
+  return getUser(id)!;
 }
 
-/** Guests invited (directly) by `id`. */
-export const invitedBy = (id: number): number[] => all<{ id: number }>('SELECT id FROM guests WHERE invited_by = ?', id).map((r) => r.id);
+/** Users invited (directly) by `id`. */
+export const invitedBy = (id: number): number[] => all<{ id: number }>('SELECT id FROM users WHERE invited_by = ?', id).map((r) => r.id);
 
-export function deleteGuest(id: number): void {
-  if (!run('DELETE FROM guests WHERE id = ?', id).changes) throw new HttpError(404, 'Guest not found');
+/** The given users plus the users they invited: an inviter's limits cap theirs. */
+export function withInvitees(ids: number[]): number[] {
+  return [...new Set([...ids, ...ids.flatMap(invitedBy)])];
 }
 
-export function setPassword(guestId: number, password: unknown): void {
-  run('UPDATE guests SET password = ? WHERE id = ?', hashPassword(checkNewPassword(password)), guestId);
+export function deleteUser(id: number): void {
+  if (!run('DELETE FROM users WHERE id = ?', id).changes) throw new HttpError(404, 'User not found');
+}
+
+export function setPassword(userId: number, password: unknown): void {
+  run('UPDATE users SET password = ? WHERE id = ?', hashPassword(checkNewPassword(password)), userId);
 }
 
 // ---------------------------------------------------------------- activation
@@ -173,60 +227,62 @@ function findKey(key: unknown): KeyRow | undefined {
 export function inspectKey(key: unknown): { kind: 'activation' | 'referral'; name?: string } {
   const k = findKey(key);
   if (!keyUsable(k)) throw new HttpError(404, 'This key is invalid, expired or already used');
-  const owner = getGuest(k.guest_id);
+  const owner = getUser(k.user_id);
   if (!owner || owner.status === 'disabled') throw new HttpError(404, 'This key is invalid, expired or already used');
   return k.kind === 'activation' ? { kind: 'activation', name: owner.name } : { kind: 'referral' };
 }
 
-export function activate(key: unknown, passwordInput: unknown, nameInput?: unknown): Guest {
+export function activate(key: unknown, passwordInput: unknown, nameInput?: unknown): User {
   const password = checkNewPassword(passwordInput);
   const k = findKey(key);
   if (!keyUsable(k)) throw new HttpError(404, 'This key is invalid, expired or already used');
-  const owner = getGuest(k.guest_id);
+  const owner = getUser(k.user_id);
   if (!owner || owner.status === 'disabled') throw new HttpError(404, 'This key is invalid, expired or already used');
 
   return tx(() => {
     const now = Date.now();
     if (k.kind === 'activation') {
-      run("UPDATE guests SET password = ?, status = 'active', activated_at = COALESCE(activated_at, ?) WHERE id = ?", hashPassword(password), now, owner.id);
+      run("UPDATE users SET password = ?, status = 'active', activated_at = COALESCE(activated_at, ?) WHERE id = ?", hashPassword(password), now, owner.id);
       run('UPDATE keys SET used_at = ?, used_by = ? WHERE id = ?', now, owner.id, k.id);
-      return getGuest(owner.id)!;
+      return getUser(owner.id)!;
     }
     // referral: the inviter must still be allowed to invite
     if (owner.status !== 'active') throw new HttpError(404, 'This key is invalid, expired or already used');
     const name = validateName(nameInput);
     ensureNameFree(name);
-    const limits = clampToParent(getGlobals().defaultLimits, owner.limits);
-    // Invited guests get no referrals of their own.
+    const preset = defaultPreset();
+    const limits = clampToParent(preset.limits, owner.limits);
+    // Invited users get no referrals of their own.
     const { id } = run(
-      "INSERT INTO guests (name, password, status, limits, referral_quota, invited_by, created_at, activated_at) VALUES (?, ?, 'active', ?, 0, ?, ?, ?)",
+      "INSERT INTO users (name, password, status, limits, preset_id, referral_quota, invited_by, created_at, activated_at) VALUES (?, ?, 'active', ?, ?, 0, ?, ?, ?)",
       name,
       hashPassword(password),
       JSON.stringify(limits),
+      preset.id,
       owner.id,
       now,
       now,
     );
     run('UPDATE keys SET used_at = ?, used_by = ? WHERE id = ?', now, id, k.id);
-    return getGuest(id)!;
+    return getUser(id)!;
   });
 }
 
-/** Returns the guest when name + password are right and the account is active. */
-export function authenticate(name: unknown, password: unknown): Guest | null {
-  const row = typeof name === 'string' ? get<GuestRow>('SELECT * FROM guests WHERE name = ?', name.trim()) : undefined;
+/** Returns the user when name + password are right and the account is active. */
+export function authenticate(name: unknown, password: unknown): User | null {
+  const row = typeof name === 'string' ? get<UserRow>('SELECT * FROM users WHERE name = ?', name.trim()) : undefined;
   const ok = verifyStoredPassword(typeof password === 'string' ? password : '', row?.password);
   if (!row || !ok || row.status !== 'active') return null;
-  run('UPDATE guests SET last_seen = ? WHERE id = ?', Date.now(), row.id);
-  return toGuest(row);
+  run('UPDATE users SET last_seen = ? WHERE id = ?', Date.now(), row.id);
+  return toUser(row);
 }
 
-export function changeOwnPassword(guestId: number, current: unknown, next: unknown): void {
-  const row = get<GuestRow>('SELECT * FROM guests WHERE id = ?', guestId);
+export function changeOwnPassword(userId: number, current: unknown, next: unknown): void {
+  const row = get<UserRow>('SELECT * FROM users WHERE id = ?', userId);
   if (!row || !verifyStoredPassword(typeof current === 'string' ? current : '', row.password)) {
     throw new HttpError(403, 'Current password is wrong');
   }
-  setPassword(guestId, next);
+  setPassword(userId, next);
 }
 
 // ---------------------------------------------------------------- referrals
@@ -240,11 +296,11 @@ export interface ReferralInfo {
   usedBy: string | null;
 }
 
-export function listReferrals(guestId: number): ReferralInfo[] {
+export function listReferrals(userId: number): ReferralInfo[] {
   const rows = all<KeyRow & { used_by_name: string | null }>(
-    `SELECT k.*, g.name AS used_by_name FROM keys k LEFT JOIN guests g ON g.id = k.used_by
-     WHERE k.kind = 'referral' AND k.guest_id = ? ORDER BY k.created_at DESC`,
-    guestId,
+    `SELECT k.*, g.name AS used_by_name FROM keys k LEFT JOIN users g ON g.id = k.used_by
+     WHERE k.kind = 'referral' AND k.user_id = ? ORDER BY k.created_at DESC`,
+    userId,
   );
   return rows.map((k) => ({
     id: k.id,
@@ -257,38 +313,38 @@ export function listReferrals(guestId: number): ReferralInfo[] {
 }
 
 /** Slots in use: keys that were redeemed or are still waiting to be. Revoked and expired keys free their slot. */
-export function referralsUsed(guestId: number): number {
+export function referralsUsed(userId: number): number {
   return get<{ n: number }>(
-    "SELECT COUNT(*) AS n FROM keys WHERE kind = 'referral' AND guest_id = ? AND revoked = 0 AND (used_at IS NOT NULL OR expires_at > ?)",
-    guestId,
+    "SELECT COUNT(*) AS n FROM keys WHERE kind = 'referral' AND user_id = ? AND revoked = 0 AND (used_at IS NOT NULL OR expires_at > ?)",
+    userId,
     Date.now(),
   )!.n;
 }
 
-export function createReferral(guestId: number): { key: string; expiresAt: number } {
-  const guest = getGuest(guestId);
-  if (!guest || guest.status !== 'active') throw new HttpError(403, 'Not allowed');
+export function createReferral(userId: number): { key: string; expiresAt: number } {
+  const user = getUser(userId);
+  if (!user || user.status !== 'active') throw new HttpError(403, 'Not allowed');
   return tx(() => {
-    if (referralsUsed(guestId) >= guest.referralQuota) throw new HttpError(403, 'You have no referrals left');
-    return insertKey('referral', guestId, REFERRAL_TTL);
+    if (referralsUsed(userId) >= user.referralQuota) throw new HttpError(403, 'You have no referrals left');
+    return insertKey('referral', userId, REFERRAL_TTL);
   });
 }
 
-export function revokeReferral(guestId: number, keyId: number): void {
-  const r = run("UPDATE keys SET revoked = 1 WHERE id = ? AND guest_id = ? AND kind = 'referral' AND used_at IS NULL", keyId, guestId);
+export function revokeReferral(userId: number, keyId: number): void {
+  const r = run("UPDATE keys SET revoked = 1 WHERE id = ? AND user_id = ? AND kind = 'referral' AND used_at IS NULL", keyId, userId);
   if (!r.changes) throw new HttpError(404, 'Key not found or already used');
 }
 
 // ---------------------------------------------------------------- usage
 
-export function monthlyBytes(guestId: number): number {
-  return get<{ bytes: number }>('SELECT bytes FROM usage WHERE guest_id = ? AND month = ?', guestId, currentMonth())?.bytes ?? 0;
+export function monthlyBytes(userId: number): number {
+  return get<{ bytes: number }>('SELECT bytes FROM usage WHERE user_id = ? AND month = ?', userId, currentMonth())?.bytes ?? 0;
 }
 
-export function addUsage(guestId: number, bytes: number): void {
+export function addUsage(userId: number, bytes: number): void {
   run(
-    'INSERT INTO usage (guest_id, month, bytes) VALUES (?, ?, ?) ON CONFLICT(guest_id, month) DO UPDATE SET bytes = bytes + excluded.bytes',
-    guestId,
+    'INSERT INTO usage (user_id, month, bytes) VALUES (?, ?, ?) ON CONFLICT(user_id, month) DO UPDATE SET bytes = bytes + excluded.bytes',
+    userId,
     currentMonth(),
     Math.round(bytes),
   );

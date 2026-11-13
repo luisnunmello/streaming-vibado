@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync, type SQLInputValue } from 'node:sqlite';
 import { config } from './config.js';
+import { FALLBACK_LIMITS } from './limits.js';
 
 fs.mkdirSync(config.dataDir, { recursive: true });
 export const db = new DatabaseSync(path.join(config.dataDir, 'streaming.db'));
@@ -59,6 +60,47 @@ if (version < 1) {
   try {
     db.exec(SCHEMA_V1);
     db.exec('PRAGMA user_version = 1');
+    db.exec('COMMIT');
+  } catch (e) {
+    db.exec('ROLLBACK');
+    throw e;
+  }
+}
+
+/**
+ * v2: "guests" become "users", and limit presets are introduced.
+ * The old server-wide "default limits" setting becomes the first (default) preset.
+ */
+if (version < 2) {
+  db.exec('BEGIN');
+  try {
+    db.exec(`
+      ALTER TABLE guests RENAME TO users;
+      ALTER TABLE keys RENAME COLUMN guest_id TO user_id;
+      ALTER TABLE usage RENAME COLUMN guest_id TO user_id;
+      CREATE TABLE presets (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        name       TEXT NOT NULL UNIQUE COLLATE NOCASE,
+        limits     TEXT NOT NULL,
+        is_default INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL
+      );
+      ALTER TABLE users ADD COLUMN preset_id INTEGER REFERENCES presets(id) ON DELETE SET NULL;
+    `);
+    const row = db.prepare("SELECT value FROM settings WHERE key = 'global'").get() as { value: string } | undefined;
+    let stored: Record<string, unknown> = {};
+    try {
+      stored = row ? JSON.parse(row.value) : {};
+    } catch {
+      /* ignore a corrupt value */
+    }
+    const defaultLimits = { ...FALLBACK_LIMITS, ...((stored['defaultLimits'] as object | undefined) ?? {}) };
+    db.prepare("INSERT INTO presets (name, limits, is_default, created_at) VALUES ('Default', ?, 1, ?)").run(JSON.stringify(defaultLimits), Date.now());
+    if ('guestStreamsPaused' in stored) stored['userStreamsPaused'] = stored['guestStreamsPaused'];
+    delete stored['guestStreamsPaused'];
+    delete stored['defaultLimits'];
+    if (row) db.prepare("UPDATE settings SET value = ? WHERE key = 'global'").run(JSON.stringify(stored));
+    db.exec('PRAGMA user_version = 2');
     db.exec('COMMIT');
   } catch (e) {
     db.exec('ROLLBACK');

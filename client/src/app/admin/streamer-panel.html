@@ -19,6 +19,12 @@
           <span class="muted" title="Viewers × bitrate: what your server uploads right now (at most)">≈ {{ egressMbps() }} Mbps out</span>
         }
         <span class="spacer"></span>
+        @if (live()) {
+          <button type="button" class="btn" [disabled]="s.changingSource()" (click)="s.changeSource()"
+                  title="Share a different screen, window or tab without stopping the stream">
+            {{ s.changingSource() ? 'Choosing…' : 'Change screen / window' }}
+          </button>
+        }
         <button type="button" class="btn big" [class.primary]="!busy()" [class.danger]="busy()" [disabled]="!secure && !busy()" (click)="toggle()">
           {{ busy() ? 'Stop streaming' : 'Start streaming' }}
         </button>
@@ -81,7 +87,7 @@
     <div class="card">
       <h2>Video quality <small>live</small></h2>
       <div class="chips">
-        @for (p of presets; track p.label) {
+        @for (p of presets(); track p.label) {
           <button type="button" class="chip" [class.on]="isPreset(p)" (click)="applyPreset(p)">
             <b>{{ p.label }}</b><span>{{ p.hint }}</span>
           </button>
@@ -91,7 +97,7 @@
       <div class="field">
         <span class="label">Frame rate</span>
         <div class="seg">
-          @for (f of fpsOptions; track f) {
+          @for (f of fpsChoices(); track f) {
             <button type="button" [class.on]="settings().fps === f" (click)="patch({ fps: f })">{{ f }} fps</button>
           }
         </div>
@@ -100,7 +106,7 @@
       <div class="field">
         <span class="label">Resolution</span>
         <div class="seg">
-          @for (r of resolutions; track r.value) {
+          @for (r of resolutions(); track r.value) {
             <button type="button" [class.on]="settings().height === r.value" (click)="patch({ height: r.value })">{{ r.label }}</button>
           }
         </div>
@@ -108,7 +114,7 @@
 
       <div class="field">
         <label for="bitrate">Bitrate <b>{{ settings().bitrateMbps }} Mbps</b></label>
-        <input id="bitrate" type="range" [min]="maxBitrate < 1 ? 0.5 : 1" [max]="maxBitrate" step="0.5" [value]="settings().bitrateMbps"
+        <input id="bitrate" type="range" [min]="maxBitrate() < 1 ? 0.5 : 1" [max]="maxBitrate()" step="0.5" [value]="settings().bitrateMbps"
                (input)="patch({ bitrateMbps: +$any($event.target).value })" />
         <span class="hint">Higher keeps fast motion clean but uses more upload (yours and the server's).</span>
       </div>

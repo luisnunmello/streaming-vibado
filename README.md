@@ -4,7 +4,7 @@ Screen sharing in the browser through an **SFU** (not peer-to-peer): a streamer 
 
 - **Backend:** Express + [mediasoup](https://mediasoup.org) (SFU) + socket.io signaling + SQLite, TypeScript
 - **Frontend:** Angular
-- **Accounts:** the admin (master password) invites **guests** with activation keys. Guests create public or private rooms, stream in them, and can invite others with referral keys. Viewers need no account.
+- **Accounts:** the admin (master password) invites **users** with activation keys. Users create public or private rooms, stream in them, and can invite others with referral keys. Viewers need no account.
 
 ```
 streamer browser ──WebRTC──▶ mediasoup (server) ──WebRTC──▶ viewer browsers
@@ -20,11 +20,12 @@ streamer browser ──WebRTC──▶ mediasoup (server) ──WebRTC──▶ 
 | `/r/<room>` | everyone | Watch a room. Private rooms need their secret link (`/r/<room>?key=…`) |
 | `/r/main` | everyone | The admin's permanent room |
 | `/login`, `/activate` | everyone | Sign in; activate an account with a key |
-| `/dashboard/rooms` | admin, guests | Create, rename, make public/private, copy link, new secret link, stop, delete |
+| `/dashboard/rooms` | admin, users | Create, rename, make public/private, copy link, new secret link, stop, delete |
 | `/dashboard/rooms/<room>` | room owner | **Studio**: stream into the room |
-| `/dashboard/referrals` | guests with referrals | Create and revoke referral keys |
-| `/dashboard/account` | admin, guests | Change password, see your limits and usage |
-| `/dashboard/guests` | admin | Create guests, edit limits and referrals, reset passwords, disable, delete |
+| `/dashboard/referrals` | users with referrals | Create and revoke referral keys |
+| `/dashboard/account` | admin, users | Change password, see your limits and usage |
+| `/dashboard/users` | admin | Create users, give them a limit preset (or custom limits), edit referrals, reset passwords, disable, delete |
+| `/dashboard/presets` | admin | Limit presets: create, edit (users on the preset update at once), choose the default, delete |
 | `/dashboard/bandwidth` | admin | Live traffic, active rooms, protection settings, pause switch |
 
 ## Run locally (development)
@@ -47,11 +48,11 @@ Tests: `npm --prefix server test` starts the real server against a temporary dat
 ## Accounts, keys and referrals
 
 1. **Admin** signs in as `admin` with the master password (change it under *Account*).
-2. **Admin → Guests → New guest:** enter a name, how many referrals the guest may create, and (optionally) their limits. The server generates a random key such as `K7QM-2XWD-9PFA-R4TN`, shown **once**. Send it, or the activation link, to the person. Keys expire after 7 days and can be reissued.
-3. **The guest** opens the link (or `/activate`), enters the key and **chooses their own password**. They then sign in with their name and that password.
-4. **Referrals:** a guest with a referral quota creates keys under *Referrals*. Each key lets one person create an account (they choose their own name and password). Revoking an unused key frees the slot; keys expire after 14 days.
-5. **Invited guests** cannot invite anyone, and their limits can never exceed those of the guest who invited them. Disabling a guest can optionally disable everyone they invited.
-6. **Forgot a password?** Guests: *Guests → Edit → Reset password* gives a new activation key. Admin: see below.
+2. **Admin → Users → New user:** enter a name, how many referrals the user may create, and (optionally) their limits. The server generates a random key such as `K7QM-2XWD-9PFA-R4TN`, shown **once**. Send it, or the activation link, to the person. Keys expire after 7 days and can be reissued.
+3. **The user** opens the link (or `/activate`), enters the key and **chooses their own password**. They then sign in with their name and that password.
+4. **Referrals:** a user with a referral quota creates keys under *Referrals*. Each key lets one person create an account (they choose their own name and password). Revoking an unused key frees the slot; keys expire after 14 days.
+5. **Invited users** cannot invite anyone, and their limits can never exceed those of the user who invited them. Disabling a user can optionally disable everyone they invited.
+6. **Forgot a password?** Users: *Users → Edit → Reset password* gives a new activation key. Admin: see below.
 
 Keys are stored hashed, so they cannot be shown again after creation. Activation attempts are rate-limited.
 
@@ -63,18 +64,23 @@ Keys are stored hashed, so they cannot be shown again after creation. Activation
 
 ## Limits and bandwidth protection
 
-Each guest has limits (rooms, simultaneous streams, bitrate, resolution, frame rate, viewers per room, stream length, public rooms, audio, monthly traffic), enforced on the server. Defaults for new guests are set on the *Bandwidth* page and can be overridden per guest.
+Each user has limits (rooms, simultaneous streams, bitrate, resolution, frame rate, viewers per room, stream length, public rooms, audio, monthly traffic), enforced on the server.
+
+**Limit presets.** Limits are organised in named presets (*Presets* page), for example "Small", "Friends", "Trusted". A user *follows* a preset: change the preset and every user on it gets the new limits **immediately**, including in their open studio and on their running stream. New and invited users start on the preset marked *default*. A single user can instead be given **custom limits** (they stop following any preset); choosing a preset for them again links them back. Deleting a preset leaves its users on their current limits as custom values.
+
+**Limits change in real time.** When limits change, the user's open studio updates on its own (controls, maximums and the "Your limits" card), values above the new maximum are pulled down, and a stream in progress is adjusted: the bitrate ceiling is tightened, audio is switched off if it is no longer allowed, the time limit is recalculated and, if fewer simultaneous streams are allowed, the most recently started ones end.
 
 The server also protects your connection as a whole: an upload budget with admission control, a share reserved for the admin, hard bitrate caps, adaptive quality layers, pausing hidden tabs, idle and time limits, per-IP caps, monthly quotas, a pause switch and live monitoring.
 
-**All of it is explained in [docs/bandwidth-protection.md](docs/bandwidth-protection.md).** Set the upload budget to about 70% of your real uplink before opening the server to guests.
+**All of it is explained in [docs/bandwidth-protection.md](docs/bandwidth-protection.md).** Set the upload budget to about 70% of your real uplink before opening the server to users.
 
 ## Streaming (studio)
 
-- **Video quality** (changeable while live): presets, frame rate, resolution, bitrate, and what to sacrifice when the machine or network can't keep up (*Keep smooth* drops resolution first, best for games; *Keep sharp* drops frame rate first, best for text). Guests are limited to their maximums.
-- **Codec** (set at start): H.264 is usually hardware-encoded (lowest CPU, best for 60 fps) and is sent as Constrained Baseline, the profile every browser accepts. If some viewer's browser cannot decode it (for example a Firefox without OpenH264), use **VP8**, which plays everywhere. VP9/AV1 give better quality per Mbps but use more CPU. Guests default to VP8.
-- **Adaptive quality** (set at start): sends three quality levels so the server can lower quality for viewers instead of refusing them. On by default for guests.
+- **Video quality** (changeable while live): presets, frame rate, resolution, bitrate, and what to sacrifice when the machine or network can't keep up (*Keep smooth* drops resolution first, best for games; *Keep sharp* drops frame rate first, best for text). Users are limited to their maximums.
+- **Codec** (set at start): H.264 is usually hardware-encoded (lowest CPU, best for 60 fps) and is sent as Constrained Baseline, the profile every browser accepts. If some viewer's browser cannot decode it (for example a Firefox without OpenH264), use **VP8**, which plays everywhere. VP9/AV1 give better quality per Mbps but use more CPU. Users default to VP8.
+- **Adaptive quality** (set at start): sends three quality levels so the server can lower quality for viewers instead of refusing them. On by default for users.
 - **Audio:** screen audio (all / shared window only), plus an optional extra input (mic or virtual cable) mixed in, with volume sliders and a mute switch that work live.
+- **Change the shared window without stopping:** the *Change screen / window* button opens the picker again and swaps the picture (and screen audio) on the same connection. Viewers keep watching without interruption.
 - **Live stats:** sent bitrate, fps, resolution, encode time, packet loss, RTT, and whether the encoder is limited by CPU or bandwidth.
 
 **Excluding specific apps from the audio:** browsers can't pick individual apps. Use *Shared window only* (Chrome/Edge on Windows), or install a virtual audio cable (e.g. VB-CABLE), route only the wanted apps to it in the Windows volume mixer, and select it as the extra input with screen audio set to *No screen audio*.
@@ -139,7 +145,7 @@ Budgets set on the *Bandwidth* page are stored in the database and take preceden
 **Forgot the master password?**
 
 - Without Docker: `npm --prefix server run reset-password -- "new password"` (no restart needed).
-- With Docker: `docker compose exec streaming rm /data/settings.json && docker compose restart`. On the next start a new password is taken from `ADMIN_PASSWORD` in `.env`, or generated and printed in `docker compose logs`. Guests and rooms are not affected.
+- With Docker: `docker compose exec streaming rm /data/settings.json && docker compose restart`. On the next start a new password is taken from `ADMIN_PASSWORD` in `.env`, or generated and printed in `docker compose logs`. Users and rooms are not affected.
 
 ## Capacity
 
@@ -149,7 +155,7 @@ Server upload ≈ `viewers × bitrate`. At 1080p60 (~10 Mbps) a 500 Mbps budget 
 
 This is still a prototype.
 
-- Verified with Chrome automation (fake capture source), directly and in Docker: sign-in, key activation, referrals, private/public rooms, streaming with three quality levels, viewer quality switching, limits, per-IP cap, disabling a guest while live, and the bandwidth page. Not yet verified with real high-motion content, many simultaneous viewers, or over the real internet. Check the *Encoder limit* indicator when tuning.
+- Verified with Chrome automation (fake capture source), directly and in Docker: sign-in, key activation, referrals, private/public rooms, streaming with three quality levels, viewer quality switching, limits, per-IP cap, disabling a user while live, and the bandwidth page. Not yet verified with real high-motion content, many simultaneous viewers, or over the real internet. Check the *Encoder limit* indicator when tuning.
 - Sessions are kept in memory: a restart signs everyone out.
 - A room has one streamer at a time, and the streamer's room must be open in only one window.
 - Screen capture and audio options need a desktop Chromium-based browser (Chrome, Edge). System/window audio capture depends on OS and browser support.

@@ -1,4 +1,4 @@
-import { addUsage, getGuest, monthlyBytes } from './accounts.js';
+import { addUsage, getUser, monthlyBytes } from './accounts.js';
 import { getGlobals } from './globals.js';
 import type { LiveService, RoomRuntime } from './live.js';
 
@@ -8,12 +8,12 @@ const MAX_LAYER = 2;
 
 export interface BandwidthView {
   /** Measured, in Mbps. */
-  egress: { guest: number; admin: number; total: number };
-  ingress: { guest: number; admin: number; total: number };
-  budget: { egressMbps: number; guestEgressMbps: number; ingressMbps: number };
-  /** Highest quality layer guest viewers currently get (2 = best). Lower means the server is under pressure. */
+  egress: { user: number; admin: number; total: number };
+  ingress: { user: number; admin: number; total: number };
+  budget: { egressMbps: number; userEgressMbps: number; ingressMbps: number };
+  /** Highest quality layer user viewers currently get (2 = best). Lower means the server is under pressure. */
   layerCap: number;
-  guestStreamsPaused: boolean;
+  userStreamsPaused: boolean;
   rooms: {
     id: string;
     name: string;
@@ -31,12 +31,12 @@ export interface BandwidthView {
  * admission control, quality-layer degradation, idle/quota stops, usage accounting.
  */
 export class BudgetManager {
-  /** Spatial layer ceiling for guest viewers (0..2). */
+  /** Spatial layer ceiling for user viewers (0..2). */
   layerCap = MAX_LAYER;
   private calmTicks = 0;
-  private egressGuest = 0;
+  private egressUser = 0;
   private egressAdmin = 0;
-  private ingressGuest = 0;
+  private ingressUser = 0;
   private ingressAdmin = 0;
   /** Bits/s promised to viewers/streams admitted since the last measurement. */
   private pendingEgress = 0;
@@ -68,10 +68,10 @@ export class BudgetManager {
       ...this.cached,
       budget: {
         egressMbps: g.egressBudgetMbps,
-        guestEgressMbps: Math.round(g.egressBudgetMbps * (1 - g.adminReservePct / 100)),
+        userEgressMbps: Math.round(g.egressBudgetMbps * (1 - g.adminReservePct / 100)),
         ingressMbps: g.ingressBudgetMbps,
       },
-      guestStreamsPaused: g.guestStreamsPaused,
+      userStreamsPaused: g.userStreamsPaused,
     };
   }
 
@@ -81,12 +81,12 @@ export class BudgetManager {
   admitViewer(rt: RoomRuntime): boolean {
     const g = getGlobals();
     const cost = rt.perViewerBps || this.defaultCost(rt);
-    const total = this.egressGuest + this.egressAdmin + this.pendingEgress;
+    const total = this.egressUser + this.egressAdmin + this.pendingEgress;
     const budget = g.egressBudgetMbps * 1e6;
     if (total + cost > budget) return false;
     if (rt.room.ownerId !== null) {
-      const guestBudget = budget * (1 - g.adminReservePct / 100);
-      if (this.egressGuest + this.pendingEgress + cost > guestBudget) return false;
+      const userBudget = budget * (1 - g.adminReservePct / 100);
+      if (this.egressUser + this.pendingEgress + cost > userBudget) return false;
     }
     this.pendingEgress += cost;
     return true;
@@ -95,14 +95,14 @@ export class BudgetManager {
   /** Is there ingress room for a new stream of up to `maxBps`? */
   admitStream(maxBps: number): boolean {
     const budget = getGlobals().ingressBudgetMbps * 1e6;
-    if (this.ingressGuest + this.ingressAdmin + this.pendingIngress + maxBps > budget) return false;
+    if (this.ingressUser + this.ingressAdmin + this.pendingIngress + maxBps > budget) return false;
     this.pendingIngress += maxBps;
     return true;
   }
 
   private defaultCost(rt: RoomRuntime): number {
-    const guest = rt.room.ownerId === null ? null : getGuest(rt.room.ownerId);
-    return guest ? guest.limits.maxBitrateMbps * 1e6 : 8e6;
+    const user = rt.room.ownerId === null ? null : getUser(rt.room.ownerId);
+    return user ? user.limits.maxBitrateMbps * 1e6 : 8e6;
   }
 
   // ------------------------------------------------------------------ measuring
@@ -138,9 +138,9 @@ export class BudgetManager {
         this.enforceStops(rt, now, g.idleStopMinutes);
       }
 
-      this.egressGuest = egG;
+      this.egressUser = egG;
       this.egressAdmin = egA;
-      this.ingressGuest = inG;
+      this.ingressUser = inG;
       this.ingressAdmin = inA;
       this.pendingEgress = 0;
       this.pendingIngress = 0;
@@ -203,22 +203,22 @@ export class BudgetManager {
       rt.idleSince = null;
     }
     // monthly quota
-    const guest = getGuest(rt.room.ownerId);
-    if (guest && guest.limits.monthlyGb > 0) {
-      const used = monthlyBytes(guest.id) + (this.pendingUsage.get(guest.id) ?? 0);
-      if (used >= guest.limits.monthlyGb * 1e9) this.live.endStream(rt, 'Your monthly traffic quota is used up');
+    const user = getUser(rt.room.ownerId);
+    if (user && user.limits.monthlyGb > 0) {
+      const used = monthlyBytes(user.id) + (this.pendingUsage.get(user.id) ?? 0);
+      if (used >= user.limits.monthlyGb * 1e9) this.live.endStream(rt, 'Your monthly traffic quota is used up');
     }
   }
 
   /**
-   * Under pressure, guest viewers are moved to lower quality layers (streams with layers only);
+   * Under pressure, user viewers are moved to lower quality layers (streams with layers only);
    * when things calm down they go back up one step at a time.
    */
   private adjustLayers(budgetBps: number, reservePct: number): void {
-    const guestBudget = budgetBps * (1 - reservePct / 100);
-    const total = this.egressGuest + this.egressAdmin;
-    const hot = this.egressGuest > guestBudget * 0.95 || total > budgetBps * 0.95;
-    const cool = this.egressGuest < guestBudget * 0.7 && total < budgetBps * 0.8;
+    const userBudget = budgetBps * (1 - reservePct / 100);
+    const total = this.egressUser + this.egressAdmin;
+    const hot = this.egressUser > userBudget * 0.95 || total > budgetBps * 0.95;
+    const cool = this.egressUser < userBudget * 0.7 && total < budgetBps * 0.8;
     if (hot && this.layerCap > 0) {
       this.layerCap--;
       this.calmTicks = 0;
@@ -235,11 +235,11 @@ export class BudgetManager {
   }
 
   private flushUsage(): void {
-    for (const [guestId, bytes] of this.pendingUsage) {
+    for (const [userId, bytes] of this.pendingUsage) {
       try {
-        addUsage(guestId, bytes);
+        addUsage(userId, bytes);
       } catch {
-        /* guest deleted meanwhile */
+        /* user deleted meanwhile */
       }
     }
     this.pendingUsage.clear();
@@ -252,22 +252,22 @@ export class BudgetManager {
     const g = getGlobals();
     const mbps = (bps: number) => Math.round(bps / 1e4) / 100;
     return {
-      egress: { guest: mbps(this.egressGuest), admin: mbps(this.egressAdmin), total: mbps(this.egressGuest + this.egressAdmin) },
-      ingress: { guest: mbps(this.ingressGuest), admin: mbps(this.ingressAdmin), total: mbps(this.ingressGuest + this.ingressAdmin) },
+      egress: { user: mbps(this.egressUser), admin: mbps(this.egressAdmin), total: mbps(this.egressUser + this.egressAdmin) },
+      ingress: { user: mbps(this.ingressUser), admin: mbps(this.ingressAdmin), total: mbps(this.ingressUser + this.ingressAdmin) },
       budget: {
         egressMbps: g.egressBudgetMbps,
-        guestEgressMbps: Math.round(g.egressBudgetMbps * (1 - g.adminReservePct / 100)),
+        userEgressMbps: Math.round(g.egressBudgetMbps * (1 - g.adminReservePct / 100)),
         ingressMbps: g.ingressBudgetMbps,
       },
       layerCap: this.layerCap,
-      guestStreamsPaused: g.guestStreamsPaused,
+      userStreamsPaused: g.userStreamsPaused,
       rooms: [...this.live.runtimes.values()]
         .filter((rt) => this.live.isLive(rt) || rt.viewerIds.size > 0)
         .map((rt) => ({
           id: rt.room.id,
           name: rt.room.name,
           slug: rt.room.slug,
-          owner: rt.room.ownerId === null ? 'Admin' : (getGuest(rt.room.ownerId)?.name ?? '?'),
+          owner: rt.room.ownerId === null ? 'Admin' : (getUser(rt.room.ownerId)?.name ?? '?'),
           live: this.live.isLive(rt),
           viewers: rt.viewerIds.size,
           egressMbps: mbps(rt.egressBps),

@@ -3,9 +3,9 @@ import crypto from 'node:crypto';
 const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 
 export interface Principal {
-  role: 'admin' | 'guest';
-  /** Set for guests. */
-  guestId?: number;
+  role: 'admin' | 'user';
+  /** Set for users. */
+  userId?: number;
 }
 
 interface Session {
@@ -57,9 +57,9 @@ function revokeWhere(pred: (p: Principal, token: string) => boolean): string[] {
 /** Ends every admin session except `keep` (used when the master password changes). */
 export const revokeAdminSessions = (keep?: string) => revokeWhere((p, t) => p.role === 'admin' && t !== keep);
 
-/** Ends every session of a guest, optionally keeping one. */
-export const revokeGuestSessions = (guestId: number, keep?: string) =>
-  revokeWhere((p, t) => p.role === 'guest' && p.guestId === guestId && t !== keep);
+/** Ends every session of a user, optionally keeping one. */
+export const revokeUserSessions = (userId: number, keep?: string) =>
+  revokeWhere((p, t) => p.role === 'user' && p.userId === userId && t !== keep);
 
 // --- throttling: 5 failures per key (IP) -> locked for 1 minute, doubling on repeats (max 15 min) ---
 const failures = new Map<string, { count: number; lockedUntil: number; lockMs: number }>();

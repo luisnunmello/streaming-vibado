@@ -1,4 +1,4 @@
-import { Component, inject } from '@angular/core';
+import { Component, OnDestroy, OnInit, inject } from '@angular/core';
 import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { AuthService } from '../../core/auth.service';
 
@@ -10,11 +10,12 @@ import { AuthService } from '../../core/auth.service';
       <a routerLink="/" class="brand">Streaming</a>
       <nav>
         <a routerLink="/dashboard/rooms" routerLinkActive="on">Rooms</a>
-        @if (auth.isGuest() && (auth.me()?.referrals?.quota ?? 0) > 0) {
+        @if (auth.isUser() && (auth.me()?.referrals?.quota ?? 0) > 0) {
           <a routerLink="/dashboard/referrals" routerLinkActive="on">Referrals</a>
         }
         @if (auth.isAdmin()) {
-          <a routerLink="/dashboard/guests" routerLinkActive="on">Guests</a>
+          <a routerLink="/dashboard/users" routerLinkActive="on">Users</a>
+          <a routerLink="/dashboard/presets" routerLinkActive="on">Presets</a>
           <a routerLink="/dashboard/bandwidth" routerLinkActive="on">Bandwidth</a>
         }
         <a routerLink="/dashboard/account" routerLinkActive="on">Account</a>
@@ -79,9 +80,23 @@ import { AuthService } from '../../core/auth.service';
     }
   `,
 })
-export class Shell {
+export class Shell implements OnInit, OnDestroy {
   protected readonly auth = inject(AuthService);
   private readonly router = inject(Router);
+  private timer?: ReturnType<typeof setInterval>;
+
+  ngOnInit(): void {
+    // Keeps limits and referral counts current on every page, and notices a session the server ended
+    // (account disabled, password changed elsewhere). The studio gets limit changes instantly over its socket.
+    this.timer = setInterval(async () => {
+      await this.auth.refresh();
+      if (!this.auth.me()) await this.router.navigate(['/login']);
+    }, 15_000);
+  }
+
+  ngOnDestroy(): void {
+    clearInterval(this.timer);
+  }
 
   protected async logout(): Promise<void> {
     await this.auth.logout();

@@ -218,7 +218,7 @@ export class Rooms implements OnInit, OnDestroy {
   /** The studio is only for rooms you own (the admin owns the main room and their own). */
   protected isMine(r: RoomView): boolean {
     const me = this.auth.me();
-    return !!me && (me.role === 'admin' ? r.ownerId === null : r.ownerId === me.guestId);
+    return !!me && (me.role === 'admin' ? r.ownerId === null : r.ownerId === me.userId);
   }
 
   protected canPublicFor(_r: RoomView): boolean {

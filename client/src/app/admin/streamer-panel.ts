@@ -22,11 +22,12 @@ export class StreamerPanel implements OnInit, OnDestroy {
   protected readonly s = inject(StreamerService);
   protected readonly settings = signal<StreamSettings>(clampSettings(loadSettings({ adaptive: !!this.s.limits(), codec: this.s.limits() ? 'vp8' : 'h264' }), this.s.limits()));
   protected readonly devices = signal<MediaDeviceInfo[]>([]);
-  protected readonly presets = this.distinctPresets();
-  protected readonly resolutions = resolutionOptions(this.s.limits());
-  protected readonly maxBitrate = this.s.limits()?.maxBitrateMbps ?? 40;
+  // Everything below follows the account's limits, which the admin can change while this page is open.
+  protected readonly presets = computed(() => this.distinctPresets());
+  protected readonly resolutions = computed(() => resolutionOptions(this.s.limits()));
+  protected readonly maxBitrate = computed(() => this.s.limits()?.maxBitrateMbps ?? 40);
   protected readonly codecs = CODECS;
-  protected readonly fpsOptions = fpsOptions(this.s.limits());
+  protected readonly fpsChoices = computed(() => fpsOptions(this.s.limits()));
   protected readonly audioModes: { value: AudioMode; label: string; hint: string }[] = [
     { value: 'none', label: 'No screen audio', hint: 'Nothing from the screen is sent.' },
     { value: 'system', label: 'Everything', hint: 'All sound from the shared screen (or tab).' },
@@ -48,6 +49,17 @@ export class StreamerPanel implements OnInit, OnDestroy {
       const el = this.previewEl()?.nativeElement;
       const stream = this.s.preview();
       if (el) el.srcObject = stream;
+    });
+    // When the limits change (live, from the admin), pull the current settings inside them. If that changes
+    // anything, the effect below sends it to the running encoder.
+    effect(() => {
+      const limits = this.s.limits();
+      untracked(() =>
+        this.settings.update((cur) => {
+          const next = clampSettings(cur, limits);
+          return JSON.stringify(next) === JSON.stringify(cur) ? cur : next;
+        }),
+      );
     });
     // Persist settings and push live-adjustable ones to the running encoder.
     effect(() => {

@@ -8,7 +8,7 @@ export class AuthService {
 
   readonly me = signal<Me | null>(null);
   readonly isAdmin = computed(() => this.me()?.role === 'admin');
-  readonly isGuest = computed(() => this.me()?.role === 'guest');
+  readonly isUser = computed(() => this.me()?.role === 'user');
   private loading?: Promise<void>;
 
   /** Loads the current user once (from the stored token). */

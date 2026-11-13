@@ -12,9 +12,9 @@ export interface Limits {
 }
 
 export interface Me {
-  role: 'admin' | 'guest';
+  role: 'admin' | 'user';
   name: string;
-  guestId?: number;
+  userId?: number;
   /** null for the admin (no per-account limits). */
   limits: Limits | null;
   referrals?: { quota: number; used: number };
@@ -44,11 +44,15 @@ export interface LobbyRoom {
   viewers: number;
 }
 
-export interface GuestView {
+export interface UserView {
   id: number;
   name: string;
   status: 'pending' | 'active' | 'disabled';
+  /** What the user may do right now. */
   limits: Limits;
+  /** The preset the user follows; null = custom limits. */
+  presetId: number | null;
+  presetName: string | null;
   referralQuota: number;
   referralsUsed: number;
   invitedById: number | null;
@@ -76,16 +80,34 @@ export interface GlobalSettings {
   adminReservePct: number;
   idleStopMinutes: number;
   maxConnectionsPerIp: number;
-  guestStreamsPaused: boolean;
-  defaultLimits: Limits;
+  userStreamsPaused: boolean;
+}
+
+export interface Preset {
+  id: number;
+  name: string;
+  limits: Limits;
+  isDefault: boolean;
+  createdAt: number;
+  userCount: number;
+}
+
+/** One-line description of a set of limits. */
+export function describeLimits(l: Limits): string {
+  const parts = [`${l.maxHeight}p${l.maxFps}`, `${l.maxBitrateMbps} Mbps`, `${l.maxViewersPerRoom} viewers`, `${l.maxRooms} room${l.maxRooms === 1 ? '' : 's'}`];
+  if (l.maxStreamMinutes) parts.push(`${l.maxStreamMinutes} min`);
+  if (l.monthlyGb) parts.push(`${l.monthlyGb} GB/month`);
+  if (!l.allowAudio) parts.push('no audio');
+  if (!l.allowPublicRooms) parts.push('no public rooms');
+  return parts.join(' · ');
 }
 
 export interface BandwidthView {
-  egress: { guest: number; admin: number; total: number };
-  ingress: { guest: number; admin: number; total: number };
-  budget: { egressMbps: number; guestEgressMbps: number; ingressMbps: number };
+  egress: { user: number; admin: number; total: number };
+  ingress: { user: number; admin: number; total: number };
+  budget: { egressMbps: number; userEgressMbps: number; ingressMbps: number };
   layerCap: number;
-  guestStreamsPaused: boolean;
+  userStreamsPaused: boolean;
   rooms: { id: string; name: string; slug: string; owner: string; live: boolean; viewers: number; egressMbps: number; ingressMbps: number }[];
 }
 

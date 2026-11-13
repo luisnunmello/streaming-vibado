@@ -9,8 +9,8 @@ import { LIMIT_FIELDS, type Limits } from '../core/models';
       @for (f of fields; track f.key) {
         @if (f.type === 'number') {
           <div class="field">
-            <label [for]="'lim-' + f.key">{{ f.label }}@if (f.hint) { <small>{{ f.hint }}</small> }</label>
-            <input [id]="'lim-' + f.key" type="number" min="0" [step]="f.step ?? 1"
+            <label [for]="uid + f.key">{{ f.label }}@if (f.hint) { <small>{{ f.hint }}</small> }</label>
+            <input [id]="uid + f.key" type="number" min="0" [step]="f.step ?? 1"
                    [value]="$any(limits())[f.key]" (input)="set(f.key, +$any($event.target).value)" />
           </div>
         } @else {
@@ -30,6 +30,9 @@ import { LIMIT_FIELDS, type Limits } from '../core/models';
   `,
 })
 export class LimitsEditor {
+  private static counter = 0;
+  /** Unique per editor, so several can be on one page without clashing ids. */
+  protected readonly uid = `lim${++LimitsEditor.counter}-`;
   readonly limits = model.required<Limits>();
   protected readonly fields = LIMIT_FIELDS;
 

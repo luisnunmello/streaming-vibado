@@ -1,0 +1,341 @@
+import { Component, OnDestroy, OnInit, inject, signal } from '@angular/core';
+import { FormsModule } from '@angular/forms';
+import { RouterLink } from '@angular/router';
+import { ApiService } from '../../core/api.service';
+import { describeLimits, type Limits, type Preset, type UserView } from '../../core/models';
+import { absoluteUrl, copyText, formatBytes, timeAgo } from '../../core/util';
+import { LimitsEditor } from '../../shared/limits-editor';
+
+interface Reveal {
+  title: string;
+  key: string;
+  link: string;
+}
+
+/** `<select>` value: a preset id, or this for hand-written limits. */
+const CUSTOM = 'custom';
+
+@Component({
+  selector: 'app-users',
+  imports: [FormsModule, LimitsEditor, RouterLink],
+  template: `
+    <h1 class="page-title">Users</h1>
+
+    <div class="card create">
+      <h2>New user</h2>
+      <form (ngSubmit)="create()">
+        <div class="row">
+          <div class="field grow">
+            <label for="uname">Name</label>
+            <input id="uname" type="text" name="uname" [(ngModel)]="newName" maxlength="24" placeholder="e.g. maria" required />
+          </div>
+          <div class="field">
+            <label for="uref">Referrals</label>
+            <input id="uref" type="number" name="uref" min="0" max="1000" [(ngModel)]="newReferrals" />
+          </div>
+          <div class="field">
+            <label for="upre">Limits</label>
+            <select id="upre" name="upre" [ngModel]="newChoice()" (ngModelChange)="chooseNew($event)">
+              @for (p of presets(); track p.id) {
+                <option [value]="p.id">{{ p.name }}{{ p.isDefault ? ' (default)' : '' }}</option>
+              }
+              <option [value]="custom">Custom…</option>
+            </select>
+          </div>
+        </div>
+        @if (newChoice() === custom) {
+          @if (newLimits(); as l) {
+            <app-limits-editor [limits]="l" (limitsChange)="newLimits.set($event)" />
+          }
+        } @else if (presetOf(newChoice()); as p) {
+          <p class="muted hint">{{ describe(p.limits) }}. <a routerLink="/dashboard/presets">Manage presets</a></p>
+        }
+        <div class="row actions">
+          <button class="btn primary" type="submit" [disabled]="busy() || !newName.trim()">Create and generate key</button>
+        </div>
+      </form>
+      @if (error()) {
+        <p class="error">{{ error() }}</p>
+      }
+    </div>
+
+    @if (reveal(); as r) {
+      <div class="card reveal">
+        <h2>{{ r.title }}</h2>
+        <p class="muted">This key is shown only once and expires in 7 days. Send it to the person (the link opens the activation page with the key filled in).</p>
+        <div class="keybox">
+          <code>{{ r.key }}</code>
+          <span class="spacer"></span>
+          <button type="button" class="btn small" (click)="copy(r.key, 'key')">{{ copied() === 'key' ? 'Copied!' : 'Copy key' }}</button>
+          <button type="button" class="btn small" (click)="copy(absolute(r.link), 'link')">{{ copied() === 'link' ? 'Copied!' : 'Copy link' }}</button>
+          <button type="button" class="btn small" (click)="reveal.set(null)">Hide</button>
+        </div>
+      </div>
+    }
+
+    <div class="card">
+      <div class="table-wrap">
+        <table class="list">
+          <thead>
+            <tr>
+              <th>User</th><th>Status</th><th>Limits</th><th>Invited by</th><th>Rooms</th><th>Referrals</th><th>This month</th><th>Last seen</th><th></th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (u of users(); track u.id) {
+              <tr>
+                <td><b>{{ u.name }}</b></td>
+                <td>
+                  <span class="badge" [class.good]="u.status === 'active'" [class.warn]="u.status === 'pending'" [class.bad]="u.status === 'disabled'">{{ u.status }}</span>
+                </td>
+                <td>
+                  @if (u.presetName) {
+                    <span class="badge">{{ u.presetName }}</span>
+                  } @else {
+                    <span class="badge warn" title="Not following a preset">custom</span>
+                  }
+                </td>
+                <td class="muted">{{ u.invitedByName ?? '–' }}</td>
+                <td>{{ u.rooms }}@if (u.liveRooms) { <span class="badge live">{{ u.liveRooms }} live</span> }</td>
+                <td>{{ u.referralsUsed }} / {{ u.referralQuota }}</td>
+                <td>{{ fmt(u.monthBytes) }}</td>
+                <td class="muted">{{ u.status === 'pending' ? 'not activated' : ago(u.lastSeen) }}</td>
+                <td class="right">
+                  <button type="button" class="btn small" (click)="toggleEdit(u)">{{ editing()?.id === u.id ? 'Close' : 'Edit' }}</button>
+                </td>
+              </tr>
+              @if (editing(); as e) {
+                @if (e.id === u.id) {
+                  <tr class="edit">
+                    <td colspan="9">
+                      <div class="row">
+                        <div class="field narrow">
+                          <label [for]="'q' + u.id">Referrals this user may create</label>
+                          <input [id]="'q' + u.id" type="number" min="0" max="1000" [value]="editQuota()" (input)="editQuota.set(+$any($event.target).value)" />
+                        </div>
+                        <div class="field narrow">
+                          <label [for]="'p' + u.id">Limits</label>
+                          <select [id]="'p' + u.id" [value]="editChoice()" (change)="chooseEdit($any($event.target).value)">
+                            @for (p of presets(); track p.id) {
+                              <option [value]="p.id" [selected]="editChoice() === '' + p.id">{{ p.name }}{{ p.isDefault ? ' (default)' : '' }}</option>
+                            }
+                            <option [value]="custom" [selected]="editChoice() === custom">Custom…</option>
+                          </select>
+                        </div>
+                      </div>
+                      @if (editChoice() === custom) {
+                        @if (editLimits(); as l) {
+                          <app-limits-editor [limits]="l" (limitsChange)="editLimits.set($event)" />
+                        }
+                      } @else if (presetOf(editChoice()); as p) {
+                        <p class="muted hint">
+                          Follows <b>{{ p.name }}</b>: {{ describe(p.limits) }}. Changing the preset changes this user too.
+                        </p>
+                      }
+                      @if (u.invitedByName) {
+                        <p class="muted hint">Invited by {{ u.invitedByName }}, so these limits can never go above theirs.</p>
+                      }
+                      <div class="row actions">
+                        <button type="button" class="btn primary small" (click)="save(u)">Save changes</button>
+                        <span class="spacer"></span>
+                        <button type="button" class="btn small" (click)="reissue(u)">{{ u.status === 'pending' ? 'New activation key' : 'Reset password (new key)' }}</button>
+                        @if (u.status === 'disabled') {
+                          <button type="button" class="btn small" (click)="setStatus(u, 'active')">Enable</button>
+                        } @else if (u.status === 'active') {
+                          <button type="button" class="btn small" (click)="disable(u)">Disable</button>
+                        }
+                        <button type="button" class="btn small danger" (click)="remove(u)">Delete</button>
+                      </div>
+                    </td>
+                  </tr>
+                }
+              }
+            } @empty {
+              <tr><td colspan="9" class="muted">No users yet.</td></tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `,
+  styles: `
+    .create,
+    .reveal {
+      margin-bottom: 1rem;
+    }
+    .grow {
+      flex: 1;
+      min-width: 200px;
+    }
+    .narrow {
+      min-width: 220px;
+    }
+    .actions {
+      margin-top: 0.8rem;
+    }
+    .right {
+      text-align: right;
+    }
+    .edit td {
+      background: var(--bg);
+    }
+    .hint {
+      font-size: 0.88rem;
+      margin: 0.4rem 0 0.8rem;
+    }
+    p {
+      margin: 0 0 0.8rem;
+    }
+  `,
+})
+export class Users implements OnInit, OnDestroy {
+  private readonly api = inject(ApiService);
+  protected readonly users = signal<UserView[]>([]);
+  protected readonly presets = signal<Preset[]>([]);
+  protected readonly error = signal<string | null>(null);
+  protected readonly busy = signal(false);
+  protected readonly reveal = signal<Reveal | null>(null);
+  protected readonly copied = signal<'key' | 'link' | null>(null);
+  protected readonly editing = signal<UserView | null>(null);
+  protected readonly editChoice = signal('');
+  protected readonly editLimits = signal<Limits | null>(null);
+  protected readonly editQuota = signal(0);
+  protected readonly newChoice = signal('');
+  protected readonly newLimits = signal<Limits | null>(null);
+  protected newName = '';
+  protected newReferrals = 0;
+  protected readonly custom = CUSTOM;
+  protected readonly describe = describeLimits;
+  protected readonly fmt = formatBytes;
+  protected readonly ago = timeAgo;
+  protected readonly absolute = absoluteUrl;
+  private timer?: ReturnType<typeof setInterval>;
+
+  async ngOnInit(): Promise<void> {
+    await Promise.all([this.load(), this.loadPresets()]);
+    const def = this.presets().find((p) => p.isDefault);
+    if (def) this.newChoice.set('' + def.id);
+    this.timer = setInterval(() => void this.load(), 8000);
+  }
+
+  ngOnDestroy(): void {
+    clearInterval(this.timer);
+  }
+
+  protected presetOf(choice: string): Preset | undefined {
+    return this.presets().find((p) => '' + p.id === choice);
+  }
+
+  private async load(): Promise<void> {
+    try {
+      this.users.set((await this.api.get<{ users: UserView[] }>('/api/admin/users')).users);
+    } catch (e: any) {
+      this.error.set(e.message);
+    }
+  }
+
+  private async loadPresets(): Promise<void> {
+    try {
+      this.presets.set((await this.api.get<{ presets: Preset[] }>('/api/admin/presets')).presets);
+    } catch (e: any) {
+      this.error.set(e.message);
+    }
+  }
+
+  private async act(fn: () => Promise<unknown>): Promise<void> {
+    this.error.set(null);
+    try {
+      await fn();
+      await this.load();
+    } catch (e: any) {
+      this.error.set(e.message);
+    }
+  }
+
+  protected chooseNew(choice: string): void {
+    if (choice === CUSTOM && !this.newLimits()) {
+      // start the custom limits from the preset that was selected
+      const from = this.presetOf(this.newChoice()) ?? this.presets().find((p) => p.isDefault);
+      if (from) this.newLimits.set({ ...from.limits });
+    }
+    this.newChoice.set(choice);
+  }
+
+  protected async create(): Promise<void> {
+    this.busy.set(true);
+    await this.act(async () => {
+      const body: Record<string, unknown> = { name: this.newName.trim(), referralQuota: this.newReferrals };
+      if (this.newChoice() === CUSTOM) body['limits'] = this.newLimits();
+      else body['presetId'] = Number(this.newChoice());
+      const r = await this.api.post<{ key: string; link: string }>('/api/admin/users', body);
+      this.reveal.set({ title: `Activation key for ${this.newName.trim()}`, key: r.key, link: r.link });
+      this.newName = '';
+      this.newReferrals = 0;
+    });
+    this.busy.set(false);
+  }
+
+  protected toggleEdit(u: UserView): void {
+    if (this.editing()?.id === u.id) {
+      this.editing.set(null);
+      return;
+    }
+    this.editing.set(u);
+    this.editChoice.set(u.presetId ? '' + u.presetId : CUSTOM);
+    this.editLimits.set({ ...u.limits });
+    this.editQuota.set(u.referralQuota);
+  }
+
+  protected chooseEdit(choice: string): void {
+    if (choice === CUSTOM) {
+      // switching to custom starts from what the user has now
+      const from = this.presetOf(this.editChoice());
+      if (from) this.editLimits.set({ ...from.limits });
+    }
+    this.editChoice.set(choice);
+  }
+
+  protected save(u: UserView): Promise<void> {
+    return this.act(async () => {
+      const body: Record<string, unknown> = { referralQuota: this.editQuota() };
+      if (this.editChoice() === CUSTOM) body['limits'] = this.editLimits();
+      else if (this.editChoice() !== (u.presetId ? '' + u.presetId : '')) body['presetId'] = Number(this.editChoice());
+      await this.api.patch(`/api/admin/users/${u.id}`, body);
+      this.editing.set(null);
+      await this.loadPresets();
+    });
+  }
+
+  protected reissue(u: UserView): Promise<void> {
+    return this.act(async () => {
+      const r = await this.api.post<{ key: string; link: string }>(`/api/admin/users/${u.id}/key`);
+      this.reveal.set({ title: `New activation key for ${u.name}`, key: r.key, link: r.link });
+    });
+  }
+
+  protected setStatus(u: UserView, status: 'active' | 'disabled', cascade = false): Promise<void> {
+    return this.act(() => this.api.patch(`/api/admin/users/${u.id}`, { status, cascade }));
+  }
+
+  protected disable(u: UserView): Promise<void> {
+    if (!confirm(`Disable ${u.name}? They are signed out and their streams stop.`)) return Promise.resolve();
+    const cascade = confirm(`Also disable everyone ${u.name} invited (directly or not)?\n\nOK = yes, Cancel = only ${u.name}`);
+    return this.setStatus(u, 'disabled', cascade);
+  }
+
+  protected remove(u: UserView): Promise<void> {
+    if (!confirm(`Delete ${u.name} and all their rooms? This cannot be undone.`)) return Promise.resolve();
+    return this.act(async () => {
+      await this.api.delete(`/api/admin/users/${u.id}`);
+      this.editing.set(null);
+      await this.loadPresets();
+    });
+  }
+
+  protected async copy(text: string, what: 'key' | 'link'): Promise<void> {
+    if (await copyText(text)) {
+      this.copied.set(what);
+      setTimeout(() => this.copied.set(null), 1500);
+    }
+  }
+}

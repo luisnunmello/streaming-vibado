@@ -1,6 +1,5 @@
 import { get, run } from './db.js';
 import { HttpError } from './errors.js';
-import { FALLBACK_LIMITS, sanitizeLimits, type Limits } from './limits.js';
 
 /** Server-wide settings, editable by the admin. */
 export interface GlobalSettings {
@@ -8,16 +7,14 @@ export interface GlobalSettings {
   egressBudgetMbps: number;
   /** Most the server may receive from streamers. */
   ingressBudgetMbps: number;
-  /** Share of the egress budget that guests can never use (kept for the admin's own streams), 0-90. */
+  /** Share of the egress budget that users can never use (kept for the admin's own streams), 0-90. */
   adminReservePct: number;
-  /** Stop a guest stream after this many minutes without viewers. 0 = never. */
+  /** Stop a user stream after this many minutes without viewers. 0 = never. */
   idleStopMinutes: number;
   /** Viewer connections allowed per IP address. 0 = unlimited. */
   maxConnectionsPerIp: number;
-  /** Emergency switch: no guest can stream while true. */
-  guestStreamsPaused: boolean;
-  /** Limits given to new guests. */
-  defaultLimits: Limits;
+  /** Emergency switch: no user can stream while true. */
+  userStreamsPaused: boolean;
 }
 
 const defaults = (): GlobalSettings => ({
@@ -26,8 +23,7 @@ const defaults = (): GlobalSettings => ({
   adminReservePct: 30,
   idleStopMinutes: 30,
   maxConnectionsPerIp: 4,
-  guestStreamsPaused: false,
-  defaultLimits: { ...FALLBACK_LIMITS },
+  userStreamsPaused: false,
 });
 
 let cache: GlobalSettings | null = null;
@@ -42,7 +38,7 @@ export function getGlobals(): GlobalSettings {
   } catch {
     /* ignore corrupt value */
   }
-  cache = { ...base, ...stored, defaultLimits: { ...base.defaultLimits, ...(stored.defaultLimits ?? {}) } };
+  cache = { ...base, ...stored };
   return cache;
 }
 
@@ -60,11 +56,10 @@ export function updateGlobals(patch: Record<string, unknown>): GlobalSettings {
   if (patch['adminReservePct'] !== undefined) next.adminReservePct = num(patch['adminReservePct'], 'adminReservePct', 0, 90);
   if (patch['idleStopMinutes'] !== undefined) next.idleStopMinutes = num(patch['idleStopMinutes'], 'idleStopMinutes', 0, 1440);
   if (patch['maxConnectionsPerIp'] !== undefined) next.maxConnectionsPerIp = num(patch['maxConnectionsPerIp'], 'maxConnectionsPerIp', 0, 1000);
-  if (patch['guestStreamsPaused'] !== undefined) {
-    if (typeof patch['guestStreamsPaused'] !== 'boolean') throw new HttpError(400, 'guestStreamsPaused must be true or false');
-    next.guestStreamsPaused = patch['guestStreamsPaused'];
+  if (patch['userStreamsPaused'] !== undefined) {
+    if (typeof patch['userStreamsPaused'] !== 'boolean') throw new HttpError(400, 'userStreamsPaused must be true or false');
+    next.userStreamsPaused = patch['userStreamsPaused'];
   }
-  if (patch['defaultLimits'] !== undefined) next.defaultLimits = sanitizeLimits(patch['defaultLimits'], cur.defaultLimits);
   run("INSERT INTO settings (key, value) VALUES ('global', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", JSON.stringify(next));
   cache = next;
   return next;

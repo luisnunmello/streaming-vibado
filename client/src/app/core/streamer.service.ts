@@ -13,6 +13,7 @@ interface AudioMixer {
   ctx: AudioContext;
   master: GainNode;
   screenGain?: GainNode;
+  screenSource?: MediaStreamAudioSourceNode;
   deviceGain?: GainNode;
   track: MediaStreamTrack;
 }
@@ -42,7 +43,10 @@ export class StreamerService {
   readonly room = signal<RoomInfo | null>(null);
   /** The account's limits; null for the admin. */
   readonly limits = signal<Limits | null>(null);
+  readonly changingSource = signal(false);
 
+  /** Settings the running stream was last given. */
+  private current?: StreamSettings;
   private rtpCapabilities?: types.RtpCapabilities;
   private device?: Device;
   private transport?: types.Transport;
@@ -77,6 +81,19 @@ export class StreamerService {
         this.notice.set(reason);
         void this.stop(false);
       }),
+      // The admin changed this account's limits (or its preset): the studio follows at once.
+      this.sig.on<{ limits: Limits }>('limits', ({ limits }) => {
+        this.limits.set(limits);
+        this.flash('Your limits were updated by the administrator.');
+      }),
+      this.sig.on<{ kind: string; message: string }>('limitsEnforced', ({ kind, message }) => {
+        if (kind === 'audio') {
+          this.audioProducer?.close();
+          this.audioProducer = undefined;
+          this.hasAudio.set(false);
+        }
+        this.flash(message);
+      }),
       this.sig.on('disconnect', () => {
         if (this.state() !== 'idle') {
           this.error.set('Lost connection to the server. The stream was stopped.');
@@ -102,6 +119,12 @@ export class StreamerService {
     this.rtpCapabilities = res.rtpCapabilities;
   }
 
+  /** A message that goes away by itself. */
+  private flash(message: string): void {
+    this.notice.set(message);
+    setTimeout(() => this.notice() === message && this.notice.set(null), 10_000);
+  }
+
   async leave(): Promise<void> {
     await this.stop();
     this.unsubs.forEach((u) => u());
@@ -119,6 +142,7 @@ export class StreamerService {
   async start(requested: StreamSettings): Promise<void> {
     if (this.state() !== 'idle' || !this.room()) return;
     const s = clampSettings(requested, this.limits());
+    this.current = s;
     this.error.set(null);
     this.notice.set(null);
     if (!navigator.mediaDevices?.getDisplayMedia) {
@@ -163,6 +187,7 @@ export class StreamerService {
     this.mixer?.track.stop();
     void this.mixer?.ctx.close().catch(() => undefined);
     this.displayStream = this.micStream = this.mixer = undefined;
+    this.changingSource.set(false);
     this.preview.set(null);
     this.stats.set(null);
     this.source.set(null);
@@ -180,17 +205,7 @@ export class StreamerService {
   private async capture(s: StreamSettings): Promise<void> {
     const wantScreenAudio = s.audioMode !== 'none';
     this.appliedFps = s.fps;
-    // Chromium-only options (ignored elsewhere), hence the loose typing.
-    const options: any = {
-      video: { cursor: 'always', ...this.captureConstraints(s.fps) },
-      audio: wantScreenAudio ? { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 2 } : false,
-      systemAudio: wantScreenAudio ? 'include' : 'exclude',
-      windowAudio: s.audioMode === 'window' ? 'window' : 'system',
-      selfBrowserSurface: 'exclude',
-      surfaceSwitching: 'include',
-      monitorTypeSurfaces: 'include',
-    };
-    const display = await navigator.mediaDevices.getDisplayMedia(options);
+    const display = await navigator.mediaDevices.getDisplayMedia(this.displayOptions(s));
     this.displayStream = display;
 
     const video = display.getVideoTracks()[0];
@@ -216,6 +231,80 @@ export class StreamerService {
     this.preview.set(new MediaStream([video]));
   }
 
+  /** Chromium-only options (ignored elsewhere), hence the loose typing. */
+  private displayOptions(s: StreamSettings): any {
+    const wantScreenAudio = s.audioMode !== 'none';
+    return {
+      video: { cursor: 'always', ...this.captureConstraints(s.fps) },
+      audio: wantScreenAudio ? { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 2 } : false,
+      systemAudio: wantScreenAudio ? 'include' : 'exclude',
+      windowAudio: s.audioMode === 'window' ? 'window' : 'system',
+      selfBrowserSurface: 'exclude',
+      surfaceSwitching: 'include',
+      monitorTypeSurfaces: 'include',
+    };
+  }
+
+  /**
+   * Switch to another screen, window or tab without stopping the stream: viewers keep watching,
+   * the same connection and encoder are reused, only the picture (and screen audio) changes.
+   */
+  async changeSource(): Promise<void> {
+    if (this.state() !== 'live' || !this.videoProducer || this.changingSource()) return;
+    const s = this.current;
+    if (!s) return;
+    this.changingSource.set(true);
+    this.error.set(null);
+    this.notice.set(null);
+    try {
+      let display: MediaStream;
+      try {
+        display = await navigator.mediaDevices.getDisplayMedia(this.displayOptions(s));
+      } catch (e: any) {
+        if (e?.name === 'NotAllowedError') return; // picker cancelled: keep the current source
+        throw e;
+      }
+      const video = display.getVideoTracks()[0];
+      video.contentHint = this.hintFor(s);
+      await this.videoProducer.replaceTrack({ track: video });
+      video.onended = () => void this.stop();
+
+      // screen audio follows the new source
+      const newAudio = display.getAudioTracks()[0];
+      const m = this.mixer;
+      if (m && s.audioMode !== 'none') {
+        m.screenSource?.disconnect();
+        m.screenSource = undefined;
+        if (newAudio) {
+          if (!m.screenGain) {
+            m.screenGain = m.ctx.createGain();
+            m.screenGain.connect(m.master);
+          }
+          m.screenGain.gain.value = s.screenAudioGain;
+          m.screenSource = m.ctx.createMediaStreamSource(new MediaStream([newAudio]));
+          m.screenSource.connect(m.screenGain);
+        } else {
+          this.notice.set('The new source has no audio. Tick "Share system audio" or "Share tab audio" in the picker to include it.');
+        }
+      }
+
+      const old = this.displayStream;
+      this.displayStream = display;
+      old?.getTracks().forEach((t) => {
+        t.onended = null;
+        t.stop();
+      });
+      this.preview.set(new MediaStream([video]));
+      this.updateSource(video);
+      // the new surface may have a different size: refit the output to the chosen resolution
+      await this.applyLive(s);
+    } catch (e: any) {
+      this.error.set(e?.message ?? 'Could not change the source');
+    } finally {
+      this.changingSource.set(false);
+    }
+  }
+
   private hintFor(s: StreamSettings): string {
     return s.priority === 'motion' ? 'motion' : s.priority === 'detail' ? 'detail' : '';
   }
@@ -230,12 +319,13 @@ export class StreamerService {
       if (!track) return undefined;
       const g = ctx.createGain();
       g.gain.value = gain;
-      ctx.createMediaStreamSource(new MediaStream([track])).connect(g).connect(master);
-      return g;
+      const source = ctx.createMediaStreamSource(new MediaStream([track]));
+      source.connect(g).connect(master);
+      return { gain: g, source };
     };
-    const screenGain = connect(screen, s.screenAudioGain);
-    const deviceGain = connect(device, s.deviceGain);
-    return { ctx, master, screenGain, deviceGain, track: dest.stream.getAudioTracks()[0] };
+    const screen_ = connect(screen, s.screenAudioGain);
+    const device_ = connect(device, s.deviceGain);
+    return { ctx, master, screenGain: screen_?.gain, screenSource: screen_?.source, deviceGain: device_?.gain, track: dest.stream.getAudioTracks()[0] };
   }
 
   private updateSource(track: MediaStreamTrack) {
@@ -360,6 +450,7 @@ export class StreamerService {
   async applyLive(requested: StreamSettings): Promise<void> {
     if (this.state() !== 'live') return;
     const s = clampSettings(requested, this.limits());
+    this.current = s;
     const video = this.displayStream?.getVideoTracks()[0];
     if (video) {
       video.contentHint = this.hintFor(s);

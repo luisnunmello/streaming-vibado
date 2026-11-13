@@ -72,34 +72,34 @@ describe('accounts, referrals and rooms', () => {
     assert.equal((await api('GET', '/api/me', { token: admin })).role, 'admin');
   });
 
-  it('only admins can use the guest endpoints', async () => {
-    assert.equal((await api('GET', '/api/admin/guests')).status, 401);
-    const created = await api('POST', '/api/admin/guests', { token: admin, body: { name: 'tmp', referralQuota: 0 } });
+  it('only admins can use the user endpoints', async () => {
+    assert.equal((await api('GET', '/api/admin/users')).status, 401);
+    const created = await api('POST', '/api/admin/users', { token: admin, body: { name: 'tmp', referralQuota: 0 } });
     assert.equal(created.status, 201);
     const tmpKey = created.key;
     const tmp = await api('POST', '/api/activate', { body: { key: tmpKey, password: 'tmp-password-1' } });
-    assert.equal((await api('GET', '/api/admin/guests', { token: tmp.token })).status, 403);
-    await api('DELETE', `/api/admin/guests/${created.guest.id}`, { token: admin });
+    assert.equal((await api('GET', '/api/admin/users', { token: tmp.token })).status, 403);
+    await api('DELETE', `/api/admin/users/${created.user.id}`, { token: admin });
   });
 
-  it('creates a guest with limits and a random activation key', async () => {
-    const r = await api('POST', '/api/admin/guests', {
+  it('creates a user with limits and a random activation key', async () => {
+    const r = await api('POST', '/api/admin/users', {
       token: admin,
       body: { name: 'alice', referralQuota: 2, limits: { maxRooms: 2, maxBitrateMbps: 2, maxViewersPerRoom: 1 } },
     });
     assert.equal(r.status, 201);
     assert.match(r.key, /^[A-Z0-9]{4}(-[A-Z0-9]{4}){3}$/);
-    assert.equal(r.guest.status, 'pending');
-    assert.equal(r.guest.limits.maxRooms, 2);
-    alice = r.guest;
+    assert.equal(r.user.status, 'pending');
+    assert.equal(r.user.limits.maxRooms, 2);
+    alice = r.user;
     aliceKey = r.key;
     // names are unique (case-insensitive), "admin" is reserved, limits are validated
-    assert.equal((await api('POST', '/api/admin/guests', { token: admin, body: { name: 'ALICE' } })).status, 409);
-    assert.equal((await api('POST', '/api/admin/guests', { token: admin, body: { name: 'admin2' } })).status, 400);
-    assert.equal((await api('POST', '/api/admin/guests', { token: admin, body: { name: 'carl', limits: { maxFps: 9999 } } })).status, 400);
+    assert.equal((await api('POST', '/api/admin/users', { token: admin, body: { name: 'ALICE' } })).status, 409);
+    assert.equal((await api('POST', '/api/admin/users', { token: admin, body: { name: 'admin2' } })).status, 400);
+    assert.equal((await api('POST', '/api/admin/users', { token: admin, body: { name: 'carl', limits: { maxFps: 9999 } } })).status, 400);
   });
 
-  it('a pending guest cannot sign in; the key activates the account with a password they choose', async () => {
+  it('a pending user cannot sign in; the key activates the account with a password they choose', async () => {
     assert.equal((await api('POST', '/api/login', { body: { name: 'alice', password: 'anything-1' } })).status, 401);
     const check = await api('GET', `/api/activate/check?key=${aliceKey}`);
     assert.deepEqual([check.kind, check.name], ['activation', 'alice']);
@@ -129,7 +129,7 @@ describe('accounts, referrals and rooms', () => {
     assert.equal((await api('POST', '/api/rooms', { token: t, body: { name: 'Third', visibility: 'public' } })).status, 403);
     state.pub = a.room;
     state.priv = b.room;
-    // guests only see their own rooms; admin sees all
+    // users only see their own rooms; admin sees all
     assert.equal((await api('GET', '/api/rooms', { token: t })).rooms.length, 2);
     assert.ok((await api('GET', '/api/rooms', { token: admin })).rooms.length >= 3);
   });
@@ -147,7 +147,7 @@ describe('accounts, referrals and rooms', () => {
     state.secret = secret;
   });
 
-  it('referrals: quota, single use, no referrals for invited guests, limits never exceed the inviter', async () => {
+  it('referrals: quota, single use, no referrals for invited users, limits never exceed the inviter', async () => {
     const t = state.aliceToken;
     const k1 = await api('POST', '/api/me/referrals', { token: t });
     const k2 = await api('POST', '/api/me/referrals', { token: t });
@@ -179,12 +179,12 @@ describe('accounts, referrals and rooms', () => {
     assert.equal((await api('POST', '/api/me/referrals', { token: bob.token })).status, 403);
   });
 
-  it('admin can edit limits and the referral quota of a guest', async () => {
-    const r = await api('PATCH', `/api/admin/guests/${alice.id}`, { token: admin, body: { referralQuota: 5, limits: { maxViewersPerRoom: 2 } } });
-    assert.equal(r.guest.referralQuota, 5);
-    assert.equal(r.guest.limits.maxViewersPerRoom, 2);
-    assert.equal(r.guest.limits.maxRooms, 2, 'other limits untouched');
-    assert.equal((await api('PATCH', `/api/admin/guests/${alice.id}`, { token: admin, body: { limits: { maxRooms: -1 } } })).status, 400);
+  it('admin can edit limits and the referral quota of a user', async () => {
+    const r = await api('PATCH', `/api/admin/users/${alice.id}`, { token: admin, body: { referralQuota: 5, limits: { maxViewersPerRoom: 2 } } });
+    assert.equal(r.user.referralQuota, 5);
+    assert.equal(r.user.limits.maxViewersPerRoom, 2);
+    assert.equal(r.user.limits.maxRooms, 2, 'other limits untouched');
+    assert.equal((await api('PATCH', `/api/admin/users/${alice.id}`, { token: admin, body: { limits: { maxRooms: -1 } } })).status, 400);
   });
 
   it('sockets: private rooms need the key, viewer cap applies, owner is recognised', async () => {
@@ -270,11 +270,11 @@ describe('accounts, referrals and rooms', () => {
     assert.ok(await login('admin', 'new-master-pass-1'));
   });
 
-  it('disabling a guest (with cascade) ends sessions and hides their rooms', async () => {
-    const r = await api('PATCH', `/api/admin/guests/${alice.id}`, { token: admin, body: { status: 'disabled', cascade: true } });
-    assert.equal(r.guest.status, 'disabled');
+  it('disabling a user (with cascade) ends sessions and hides their rooms', async () => {
+    const r = await api('PATCH', `/api/admin/users/${alice.id}`, { token: admin, body: { status: 'disabled', cascade: true } });
+    assert.equal(r.user.status, 'disabled');
     assert.equal((await api('GET', '/api/me', { token: state.aliceToken })).status, 401);
-    assert.equal((await api('GET', '/api/me', { token: bob.token })).status, 401, 'invited guest disabled too');
+    assert.equal((await api('GET', '/api/me', { token: bob.token })).status, 401, 'invited user disabled too');
     assert.equal((await api('POST', '/api/login', { body: { name: 'alice', password: 'alice-password-1' } })).status, 401);
     const slugs = (await api('GET', '/api/lobbies')).rooms.map((x) => x.slug);
     assert.ok(!slugs.includes(state.pub.slug));
@@ -282,15 +282,15 @@ describe('accounts, referrals and rooms', () => {
   });
 
   it('re-enabling plus a reissued key resets a forgotten password', async () => {
-    await api('PATCH', `/api/admin/guests/${alice.id}`, { token: admin, body: { status: 'active' } });
-    const k = await api('POST', `/api/admin/guests/${alice.id}/key`, { token: admin });
+    await api('PATCH', `/api/admin/users/${alice.id}`, { token: admin, body: { status: 'active' } });
+    const k = await api('POST', `/api/admin/users/${alice.id}/key`, { token: admin });
     assert.equal((await api('POST', '/api/activate', { body: { key: k.key, password: 'alice-new-password' } })).status, 200);
     assert.ok(await login('alice', 'alice-new-password'));
     assert.equal(await login('alice', 'alice-password-1'), undefined);
   });
 
-  it('deleting a guest removes their rooms', async () => {
-    assert.equal((await api('DELETE', `/api/admin/guests/${alice.id}`, { token: admin })).status, 200);
+  it('deleting a user removes their rooms', async () => {
+    assert.equal((await api('DELETE', `/api/admin/users/${alice.id}`, { token: admin })).status, 200);
     const slugs = (await api('GET', '/api/rooms', { token: admin })).rooms.map((x) => x.slug);
     assert.ok(!slugs.includes(state.pub.slug));
   });
@@ -298,11 +298,123 @@ describe('accounts, referrals and rooms', () => {
   it('admin settings are validated and persisted', async () => {
     const bad = await api('PUT', '/api/admin/settings', { token: admin, body: { adminReservePct: 99 } });
     assert.equal(bad.status, 400);
-    const ok = await api('PUT', '/api/admin/settings', { token: admin, body: { egressBudgetMbps: 400, defaultLimits: { maxBitrateMbps: 4 } } });
+    const ok = await api('PUT', '/api/admin/settings', { token: admin, body: { egressBudgetMbps: 400 } });
     assert.equal(ok.settings.egressBudgetMbps, 400);
-    assert.equal(ok.settings.defaultLimits.maxBitrateMbps, 4);
     assert.equal((await api('GET', '/api/admin/settings', { token: admin })).settings.egressBudgetMbps, 400);
     const bw = await api('GET', '/api/admin/bandwidth', { token: admin });
     assert.equal(bw.budget.egressMbps, 400);
+  });
+});
+
+describe('limit presets', () => {
+  let admin;
+  const user = {};
+  const small = {};
+
+  const makeUser = async (name, body = {}) => {
+    const c = await api('POST', '/api/admin/users', { token: admin, body: { name, referralQuota: 2, ...body } });
+    assert.equal(c.status, 201, JSON.stringify(c));
+    const act = await api('POST', '/api/activate', { body: { key: c.key, password: name + '-password-1' } });
+    return { id: c.user.id, token: act.token, view: c.user };
+  };
+  const patchPreset = (id, body) => api('PATCH', '/api/admin/presets/' + id, { token: admin, body });
+  const patchUser = (id, body) => api('PATCH', '/api/admin/users/' + id, { token: admin, body });
+  const meOf = (token) => api('GET', '/api/me', { token });
+
+  before(async () => {
+    admin = await login('admin', 'new-master-pass-1');
+  });
+
+  it('starts with a default preset (the old "default limits")', async () => {
+    const { presets } = await api('GET', '/api/admin/presets', { token: admin });
+    assert.equal(presets.length, 1);
+    assert.equal(presets[0].name, 'Default');
+    assert.equal(presets[0].isDefault, true);
+  });
+
+  it('creates presets; names are unique; users can follow one', async () => {
+    const r = await api('POST', '/api/admin/presets', { token: admin, body: { name: 'Small', limits: { maxBitrateMbps: 1, maxViewersPerRoom: 2, maxRooms: 1 } } });
+    assert.equal(r.status, 201);
+    Object.assign(small, r.preset);
+    assert.equal((await api('POST', '/api/admin/presets', { token: admin, body: { name: 'small' } })).status, 409);
+    assert.equal((await api('POST', '/api/admin/presets', { token: admin, body: { name: 'Bad', limits: { maxFps: 5000 } } })).status, 400);
+
+    const u = await makeUser('pat', { presetId: small.id });
+    Object.assign(user, u);
+    assert.equal(u.view.presetName, 'Small');
+    assert.equal(u.view.limits.maxBitrateMbps, 1);
+    assert.equal((await meOf(u.token)).limits.maxRooms, 1);
+    const list = await api('GET', '/api/admin/presets', { token: admin });
+    assert.equal(list.presets.find((p) => p.id === small.id).userCount, 1);
+  });
+
+  it('a user created without a preset follows the default one', async () => {
+    const u = await makeUser('dana');
+    assert.equal(u.view.presetName, 'Default');
+  });
+
+  it('changing a preset updates its users at once, over the socket too', async () => {
+    const room = (await api('POST', '/api/rooms', { token: user.token, body: { name: 'Pat Room', visibility: 'public' } })).room;
+    const owner = await join(room.slug, { token: user.token });
+    assert.equal(owner.reply.limits.maxBitrateMbps, 1);
+    const got = new Promise((resolve) => owner.socket.on('limits', resolve));
+    const r = await patchPreset(small.id, { limits: { maxBitrateMbps: 5, maxRooms: 4 } });
+    assert.equal(r.status, 200);
+    const msg = await Promise.race([got, new Promise((_, rej) => setTimeout(() => rej(new Error('no limits event')), 4000))]);
+    assert.equal(msg.limits.maxBitrateMbps, 5);
+    assert.equal(msg.limits.maxRooms, 4);
+    assert.equal(msg.limits.maxViewersPerRoom, 2, 'untouched limits are kept');
+    assert.equal((await meOf(user.token)).limits.maxBitrateMbps, 5);
+    owner.socket.close();
+  });
+
+  it('editing limits by hand detaches the user; choosing a preset links them again', async () => {
+    let r = await patchUser(user.id, { limits: { maxFps: 24 } });
+    assert.equal(r.user.presetId, null);
+    assert.equal(r.user.limits.maxFps, 24);
+    assert.equal(r.user.limits.maxBitrateMbps, 5, 'other values carried over');
+    await patchPreset(small.id, { limits: { maxBitrateMbps: 2 } });
+    assert.equal((await meOf(user.token)).limits.maxBitrateMbps, 5, 'no longer follows the preset');
+    r = await patchUser(user.id, { presetId: small.id });
+    assert.equal(r.user.presetName, 'Small');
+    assert.equal(r.user.limits.maxBitrateMbps, 2);
+    // detaching without new values keeps the limits as they are today
+    r = await patchUser(user.id, { presetId: null });
+    assert.equal(r.user.presetId, null);
+    assert.equal(r.user.limits.maxBitrateMbps, 2);
+    await patchUser(user.id, { presetId: small.id });
+  });
+
+  it('invited users never exceed their inviter, even after later preset changes', async () => {
+    await patchPreset(small.id, { limits: { maxBitrateMbps: 4 } });
+    await patchUser(user.id, { referralQuota: 1 });
+    const ref = await api('POST', '/api/me/referrals', { token: user.token });
+    const inv = await api('POST', '/api/activate', { body: { key: ref.key, name: 'invitee', password: 'invitee-password-1' } });
+    assert.ok((await meOf(inv.token)).limits.maxBitrateMbps <= 4);
+    await patchPreset(small.id, { limits: { maxBitrateMbps: 1 } });
+    assert.equal((await meOf(inv.token)).limits.maxBitrateMbps, 1, 'lowering the inviter lowers the invitee');
+  });
+
+  it('the default preset can be changed, but not deleted or unset', async () => {
+    const { presets } = await api('GET', '/api/admin/presets', { token: admin });
+    const def = presets.find((p) => p.isDefault);
+    assert.equal((await api('DELETE', '/api/admin/presets/' + def.id, { token: admin })).status, 409);
+    assert.equal((await patchPreset(def.id, { isDefault: false })).status, 400);
+    assert.equal((await patchPreset(small.id, { isDefault: true })).status, 200);
+    const after = (await api('GET', '/api/admin/presets', { token: admin })).presets;
+    assert.equal(after.filter((p) => p.isDefault).length, 1);
+    assert.equal(after.find((p) => p.isDefault).name, 'Small');
+    const u = await makeUser('newbie');
+    assert.equal(u.view.presetName, 'Small', 'new users get the new default');
+    await patchPreset(def.id, { isDefault: true });
+  });
+
+  it('deleting a preset keeps its users on their current limits, as custom values', async () => {
+    const tmp = (await api('POST', '/api/admin/presets', { token: admin, body: { name: 'Temp', limits: { maxFps: 15, maxBitrateMbps: 2 } } })).preset;
+    const u = await makeUser('temp-user', { presetId: tmp.id });
+    assert.equal((await api('DELETE', '/api/admin/presets/' + tmp.id, { token: admin })).status, 200);
+    assert.equal((await meOf(u.token)).limits.maxFps, 15);
+    const users = (await api('GET', '/api/admin/users', { token: admin })).users;
+    assert.equal(users.find((x) => x.id === u.id).presetId, null);
   });
 });

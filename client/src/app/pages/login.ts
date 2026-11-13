@@ -12,7 +12,7 @@ import { Topbar } from '../shared/topbar';
     <main class="center">
       <form class="card box" (ngSubmit)="submit()">
         <h1>Sign in</h1>
-        <p class="muted">Guests use the name they were given. The administrator signs in as <b>admin</b>.</p>
+        <p class="muted">Users use the name they were given. The administrator signs in as <b>admin</b>.</p>
         <div class="field">
           <label for="name">Name</label>
           <input id="name" type="text" name="name" [(ngModel)]="name" autocomplete="username" autofocus required />

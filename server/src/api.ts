@@ -3,20 +3,21 @@ import {
   activate,
   authenticate,
   changeOwnPassword,
-  createGuest,
+  createUser,
   createReferral,
-  deleteGuest,
-  getGuest,
+  deleteUser,
+  getUser,
   inspectKey,
   invitedBy,
-  listGuests,
+  listUsers,
   listReferrals,
   monthlyBytes,
   reissueActivationKey,
   referralsUsed,
   revokeReferral,
-  updateGuest,
-  type Guest,
+  updateUser,
+  withInvitees,
+  type User,
 } from './accounts.js';
 import {
   createSession,
@@ -25,12 +26,13 @@ import {
   lockedFor,
   recordAttempt,
   revokeAdminSessions,
-  revokeGuestSessions,
+  revokeUserSessions,
   type Principal,
 } from './auth.js';
 import type { BudgetManager } from './budget.js';
 import { HttpError } from './errors.js';
 import { getGlobals, updateGlobals } from './globals.js';
+import { createPreset, deletePreset, listPresets, updatePreset } from './presets.js';
 import type { LiveService } from './live.js';
 import { checkNewPassword } from './password.js';
 import { countRooms, createRoom, deleteRoom, getRoomById, getRoomBySlug, listPublicRooms, listRooms, updateRoom, type Room } from './rooms.js';
@@ -98,7 +100,7 @@ const idParam = (req: Request): number => {
 export function buildApi(live: LiveService, budget: BudgetManager): Router {
   const api = Router();
 
-  const guestName = (id: number | null): string => (id === null ? 'Admin' : (getGuest(id)?.name ?? '?'));
+  const userName = (id: number | null): string => (id === null ? 'Admin' : (getUser(id)?.name ?? '?'));
 
   const roomView = (r: Room) => {
     const info = live.info(r.id);
@@ -108,7 +110,7 @@ export function buildApi(live: LiveService, budget: BudgetManager): Router {
       name: r.name,
       visibility: r.visibility,
       ownerId: r.ownerId,
-      ownerName: guestName(r.ownerId),
+      ownerName: userName(r.ownerId),
       createdAt: r.createdAt,
       live: info.live,
       viewers: info.viewers,
@@ -117,15 +119,17 @@ export function buildApi(live: LiveService, budget: BudgetManager): Router {
     };
   };
 
-  const guestView = (g: Guest) => ({
+  const userView = (g: User) => ({
     id: g.id,
     name: g.name,
     status: g.status,
     limits: g.limits,
+    presetId: g.presetId,
+    presetName: g.presetName,
     referralQuota: g.referralQuota,
     referralsUsed: referralsUsed(g.id),
     invitedById: g.invitedBy,
-    invitedByName: g.invitedBy ? guestName(g.invitedBy) : null,
+    invitedByName: g.invitedBy ? userName(g.invitedBy) : null,
     createdAt: g.createdAt,
     activatedAt: g.activatedAt,
     lastSeen: g.lastSeen,
@@ -138,7 +142,7 @@ export function buildApi(live: LiveService, budget: BudgetManager): Router {
   const manageable = (res: Response, id: string): Room => {
     const room = getRoomById(id);
     const p = principalOf(res);
-    if (!room || (p.role !== 'admin' && room.ownerId !== p.guestId)) throw new HttpError(404, 'Room not found');
+    if (!room || (p.role !== 'admin' && room.ownerId !== p.userId)) throw new HttpError(404, 'Room not found');
     return room;
   };
 
@@ -166,7 +170,7 @@ export function buildApi(live: LiveService, budget: BudgetManager): Router {
     '/rooms/:slug/info',
     wrap((req, res) => {
       const room = getRoomBySlug(String(req.params['slug']));
-      const owner = room?.ownerId != null ? getGuest(room.ownerId) : undefined;
+      const owner = room?.ownerId != null ? getUser(room.ownerId) : undefined;
       const key = typeof req.query['key'] === 'string' ? req.query['key'] : '';
       const visible = !!room && (room.ownerId === null || owner?.status === 'active') && (room.visibility === 'public' || key === room.secret);
       if (!room || !visible) throw new HttpError(404, 'Room not found');
@@ -190,8 +194,8 @@ export function buildApi(live: LiveService, budget: BudgetManager): Router {
       if (name.toLowerCase() === 'admin') {
         if (verifyMasterPassword(password)) principal = { role: 'admin' };
       } else {
-        const guest = authenticate(name, password);
-        if (guest) principal = { role: 'guest', guestId: guest.id };
+        const user = authenticate(name, password);
+        if (user) principal = { role: 'user', userId: user.id };
       }
       done(!!principal);
       if (!principal) throw new HttpError(401, 'Wrong name or password');
@@ -218,15 +222,15 @@ export function buildApi(live: LiveService, budget: BudgetManager): Router {
     '/activate',
     wrap((req, res) => {
       const done = throttle(req, 'activate');
-      let guest: Guest;
+      let user: User;
       try {
-        guest = activate(req.body?.key, req.body?.password, req.body?.name);
+        user = activate(req.body?.key, req.body?.password, req.body?.name);
       } catch (e) {
         if (e instanceof HttpError && e.status === 404) done(false);
         throw e;
       }
       done(true);
-      res.json({ token: createSession({ role: 'guest', guestId: guest.id }), role: 'guest' });
+      res.json({ token: createSession({ role: 'user', userId: user.id }), role: 'user' });
     }),
   );
 
@@ -250,16 +254,16 @@ export function buildApi(live: LiveService, budget: BudgetManager): Router {
         res.json({ role: 'admin', name: 'admin', limits: null });
         return;
       }
-      const g = getGuest(p.guestId!);
+      const g = getUser(p.userId!);
       if (!g || g.status !== 'active') throw new HttpError(401, 'Unauthorized');
       res.json({
-        role: 'guest',
-        guestId: g.id,
+        role: 'user',
+        userId: g.id,
         name: g.name,
         limits: g.limits,
         referrals: { quota: g.referralQuota, used: referralsUsed(g.id) },
         monthBytes: monthlyBytes(g.id),
-        invitedByName: g.invitedBy ? guestName(g.invitedBy) : null,
+        invitedByName: g.invitedBy ? userName(g.invitedBy) : null,
       });
     }),
   );
@@ -275,27 +279,27 @@ export function buildApi(live: LiveService, budget: BudgetManager): Router {
         setMasterPassword(checkNewPassword(newPassword));
         revokeAdminSessions(tokenOf(res));
       } else {
-        changeOwnPassword(p.guestId!, currentPassword, newPassword);
-        revokeGuestSessions(p.guestId!, tokenOf(res));
+        changeOwnPassword(p.userId!, currentPassword, newPassword);
+        revokeUserSessions(p.userId!, tokenOf(res));
       }
       res.json({ ok: true });
     }),
   );
 
-  // ---------------------------------------------------------------- referrals (guests)
+  // ---------------------------------------------------------------- referrals (users)
 
-  const guestOnly = (res: Response): number => {
+  const userOnly = (res: Response): number => {
     const p = principalOf(res);
-    if (p.role !== 'guest') throw new HttpError(403, 'Only guests have referrals');
-    return p.guestId!;
+    if (p.role !== 'user') throw new HttpError(403, 'Only users have referrals');
+    return p.userId!;
   };
 
   api.get(
     '/me/referrals',
     requireAuth,
     wrap((_req, res) => {
-      const id = guestOnly(res);
-      res.json({ quota: getGuest(id)!.referralQuota, used: referralsUsed(id), keys: listReferrals(id) });
+      const id = userOnly(res);
+      res.json({ quota: getUser(id)!.referralQuota, used: referralsUsed(id), keys: listReferrals(id) });
     }),
   );
 
@@ -303,7 +307,7 @@ export function buildApi(live: LiveService, budget: BudgetManager): Router {
     '/me/referrals',
     requireAuth,
     wrap((_req, res) => {
-      const { key, expiresAt } = createReferral(guestOnly(res));
+      const { key, expiresAt } = createReferral(userOnly(res));
       res.json({ key, expiresAt, link: `/activate?key=${key}` });
     }),
   );
@@ -312,7 +316,7 @@ export function buildApi(live: LiveService, budget: BudgetManager): Router {
     '/me/referrals/:id',
     requireAuth,
     wrap((req, res) => {
-      revokeReferral(guestOnly(res), idParam(req));
+      revokeReferral(userOnly(res), idParam(req));
       res.json({ ok: true });
     }),
   );
@@ -324,7 +328,7 @@ export function buildApi(live: LiveService, budget: BudgetManager): Router {
     requireAuth,
     wrap((_req, res) => {
       const p = principalOf(res);
-      res.json({ rooms: (p.role === 'admin' ? listRooms() : listRooms(p.guestId!)).map(roomView) });
+      res.json({ rooms: (p.role === 'admin' ? listRooms() : listRooms(p.userId!)).map(roomView) });
     }),
   );
 
@@ -333,9 +337,9 @@ export function buildApi(live: LiveService, budget: BudgetManager): Router {
     requireAuth,
     wrap((req, res) => {
       const p = principalOf(res);
-      const ownerId = p.role === 'admin' ? null : p.guestId!;
+      const ownerId = p.role === 'admin' ? null : p.userId!;
       if (ownerId !== null) {
-        const limits = getGuest(ownerId)!.limits;
+        const limits = getUser(ownerId)!.limits;
         if (countRooms(ownerId) >= limits.maxRooms) throw new HttpError(403, `You can have at most ${limits.maxRooms} room(s)`);
         if (req.body?.visibility === 'public' && !limits.allowPublicRooms) throw new HttpError(403, 'Public rooms are not allowed for your account');
       }
@@ -351,7 +355,7 @@ export function buildApi(live: LiveService, budget: BudgetManager): Router {
       const p = principalOf(res);
       const body = req.body ?? {};
       if (room.slug === 'main' && body.visibility === 'private') throw new HttpError(400, 'The main room is always public');
-      if (p.role === 'guest' && body.visibility === 'public' && !getGuest(p.guestId!)!.limits.allowPublicRooms) {
+      if (p.role === 'user' && body.visibility === 'public' && !getUser(p.userId!)!.limits.allowPublicRooms) {
         throw new HttpError(403, 'Public rooms are not allowed for your account');
       }
       const updated = updateRoom(room.id, { name: body.name, visibility: body.visibility, regenerateSecret: body.regenerateSecret });
@@ -387,22 +391,22 @@ export function buildApi(live: LiveService, budget: BudgetManager): Router {
     }),
   );
 
-  // ---------------------------------------------------------------- admin: guests
+  // ---------------------------------------------------------------- admin: users
 
   api.get(
-    '/admin/guests',
+    '/admin/users',
     requireAdmin,
     wrap((_req, res) => {
-      res.json({ guests: listGuests().map(guestView) });
+      res.json({ users: listUsers().map(userView) });
     }),
   );
 
   api.post(
-    '/admin/guests',
+    '/admin/users',
     requireAdmin,
     wrap((req, res) => {
-      const { guest, key, expiresAt } = createGuest(req.body?.name, req.body?.referralQuota, req.body?.limits);
-      res.status(201).json({ guest: guestView(guest), key, expiresAt, link: `/activate?key=${key}` });
+      const { user, key, expiresAt } = createUser(req.body?.name, req.body?.referralQuota, { presetId: req.body?.presetId, limits: req.body?.limits });
+      res.status(201).json({ user: userView(user), key, expiresAt, link: `/activate?key=${key}` });
     }),
   );
 
@@ -410,25 +414,29 @@ export function buildApi(live: LiveService, budget: BudgetManager): Router {
   const subtree = (id: number): number[] => [id, ...invitedBy(id).flatMap(subtree)];
 
   api.patch(
-    '/admin/guests/:id',
+    '/admin/users/:id',
     requireAdmin,
     wrap((req, res) => {
       const id = idParam(req);
-      const guest = updateGuest(id, req.body ?? {});
+      const user = updateUser(id, req.body ?? {});
+      // New limits reach the user's open pages and their running streams at once (and those of anyone they invited).
+      if (req.body?.limits !== undefined || req.body?.presetId !== undefined) {
+        for (const uid of withInvitees([id])) live.refreshLimits(uid);
+      }
       if (req.body?.status === 'disabled') {
         const ids = req.body.cascade === true ? subtree(id) : [id];
         for (const gid of ids) {
-          if (gid !== id) updateGuest(gid, { status: 'disabled' });
-          revokeGuestSessions(gid);
-          live.stopGuestStreams('This account was disabled', gid);
+          if (gid !== id) updateUser(gid, { status: 'disabled' });
+          revokeUserSessions(gid);
+          live.stopUserStreams('This account was disabled', gid);
         }
       }
-      res.json({ guest: guestView(getGuest(guest.id)!) });
+      res.json({ user: userView(getUser(user.id)!) });
     }),
   );
 
   api.post(
-    '/admin/guests/:id/key',
+    '/admin/users/:id/key',
     requireAdmin,
     wrap((req, res) => {
       const { key, expiresAt } = reissueActivationKey(idParam(req));
@@ -437,14 +445,52 @@ export function buildApi(live: LiveService, budget: BudgetManager): Router {
   );
 
   api.delete(
-    '/admin/guests/:id',
+    '/admin/users/:id',
     requireAdmin,
     wrap((req, res) => {
       const id = idParam(req);
-      if (!getGuest(id)) throw new HttpError(404, 'Guest not found');
+      if (!getUser(id)) throw new HttpError(404, 'User not found');
       for (const r of listRooms(id)) live.closeRoom(r.id, 'This account was removed');
-      revokeGuestSessions(id);
-      deleteGuest(id);
+      revokeUserSessions(id);
+      deleteUser(id);
+      res.json({ ok: true });
+    }),
+  );
+
+  // ---------------------------------------------------------------- admin: limit presets
+
+  api.get(
+    '/admin/presets',
+    requireAdmin,
+    wrap((_req, res) => {
+      res.json({ presets: listPresets() });
+    }),
+  );
+
+  api.post(
+    '/admin/presets',
+    requireAdmin,
+    wrap((req, res) => {
+      res.status(201).json({ preset: createPreset(req.body?.name, req.body?.limits, req.body?.isDefault) });
+    }),
+  );
+
+  api.patch(
+    '/admin/presets/:id',
+    requireAdmin,
+    wrap((req, res) => {
+      const { preset, userIds } = updatePreset(idParam(req), req.body ?? {});
+      // Everyone following the preset (and the people they invited) gets the new limits immediately.
+      if (req.body?.limits !== undefined) for (const uid of withInvitees(userIds)) live.refreshLimits(uid);
+      res.json({ preset });
+    }),
+  );
+
+  api.delete(
+    '/admin/presets/:id',
+    requireAdmin,
+    wrap((req, res) => {
+      deletePreset(idParam(req));
       res.json({ ok: true });
     }),
   );
@@ -464,7 +510,7 @@ export function buildApi(live: LiveService, budget: BudgetManager): Router {
     requireAdmin,
     wrap((req, res) => {
       const settings = updateGlobals(req.body ?? {});
-      if (settings.guestStreamsPaused) live.stopGuestStreams('Guest streaming was paused by the admin');
+      if (settings.userStreamsPaused) live.stopUserStreams('User streaming was paused by the admin');
       res.json({ settings });
     }),
   );

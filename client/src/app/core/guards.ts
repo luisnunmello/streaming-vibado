@@ -15,8 +15,8 @@ export const adminGuard: CanActivateFn = async () => {
   return auth.isAdmin() ? true : inject(Router).createUrlTree(['/dashboard']);
 };
 
-export const guestGuard: CanActivateFn = async () => {
+export const userGuard: CanActivateFn = async () => {
   const auth = inject(AuthService);
   await auth.ensureLoaded();
-  return auth.isGuest() ? true : inject(Router).createUrlTree(['/dashboard']);
+  return auth.isUser() ? true : inject(Router).createUrlTree(['/dashboard']);
 };

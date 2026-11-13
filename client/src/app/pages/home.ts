@@ -47,7 +47,7 @@ import { Topbar } from '../shared/topbar';
         } @else {
           <a class="tile" routerLink="/login">
             <h2>Sign in</h2>
-            <p>For the admin and invited guests: create rooms and share your screen.</p>
+            <p>For the admin and invited users: create rooms and share your screen.</p>
           </a>
         }
 

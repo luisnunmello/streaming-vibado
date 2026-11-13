@@ -1,12 +1,12 @@
 import { Component, OnDestroy, OnInit, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ApiService } from '../../core/api.service';
-import type { BandwidthView, GlobalSettings, Limits } from '../../core/models';
-import { LimitsEditor } from '../../shared/limits-editor';
+import { RouterLink } from '@angular/router';
+import type { BandwidthView, GlobalSettings } from '../../core/models';
 
 @Component({
   selector: 'app-bandwidth',
-  imports: [FormsModule, LimitsEditor],
+  imports: [FormsModule, RouterLink],
   template: `
     <h1 class="page-title">Bandwidth</h1>
 
@@ -18,34 +18,34 @@ import { LimitsEditor } from '../../shared/limits-editor';
           <div class="label"><span>Upload to viewers</span><b>{{ v.egress.total }} / {{ v.budget.egressMbps }} Mbps</b></div>
           <div class="bar" [class.hot]="pct(v.egress.total, v.budget.egressMbps) > 80">
             <i class="admin" [style.width.%]="pct(v.egress.admin, v.budget.egressMbps)"></i>
-            <i class="guest" [style.width.%]="pct(v.egress.guest, v.budget.egressMbps)"></i>
-            <u [style.left.%]="pct(v.budget.guestEgressMbps, v.budget.egressMbps)" title="Guests cannot go beyond this mark"></u>
+            <i class="user" [style.width.%]="pct(v.egress.user, v.budget.egressMbps)"></i>
+            <u [style.left.%]="pct(v.budget.userEgressMbps, v.budget.egressMbps)" title="Users cannot go beyond this mark"></u>
           </div>
-          <div class="legend"><span class="admin">Admin {{ v.egress.admin }}</span><span class="guest">Guests {{ v.egress.guest }}</span><span class="muted">| = limit for guests ({{ v.budget.guestEgressMbps }} Mbps)</span></div>
+          <div class="legend"><span class="admin">Admin {{ v.egress.admin }}</span><span class="user">Users {{ v.egress.user }}</span><span class="muted">| = limit for users ({{ v.budget.userEgressMbps }} Mbps)</span></div>
         </div>
 
         <div class="meter">
           <div class="label"><span>Download from streamers</span><b>{{ v.ingress.total }} / {{ v.budget.ingressMbps }} Mbps</b></div>
           <div class="bar" [class.hot]="pct(v.ingress.total, v.budget.ingressMbps) > 80">
             <i class="admin" [style.width.%]="pct(v.ingress.admin, v.budget.ingressMbps)"></i>
-            <i class="guest" [style.width.%]="pct(v.ingress.guest, v.budget.ingressMbps)"></i>
+            <i class="user" [style.width.%]="pct(v.ingress.user, v.budget.ingressMbps)"></i>
           </div>
         </div>
 
         @if (pct(v.egress.total, v.budget.egressMbps) > 80) {
-          <p class="notice">Upload is above 80% of the budget. New viewers may be refused and guest viewers moved to lower quality.</p>
+          <p class="notice">Upload is above 80% of the budget. New viewers may be refused and user viewers moved to lower quality.</p>
         }
         @if (v.layerCap < 2) {
-          <p class="notice">Under pressure: guest viewers are capped at quality level {{ v.layerCap === 0 ? 'low' : 'medium' }} (only for streams with adaptive quality).</p>
+          <p class="notice">Under pressure: user viewers are capped at quality level {{ v.layerCap === 0 ? 'low' : 'medium' }} (only for streams with adaptive quality).</p>
         }
 
         <div class="row kill">
-          @if (v.guestStreamsPaused) {
-            <span class="badge bad">Guest streaming is paused</span>
-            <button type="button" class="btn small primary" (click)="setPaused(false)">Resume guest streaming</button>
+          @if (v.userStreamsPaused) {
+            <span class="badge bad">User streaming is paused</span>
+            <button type="button" class="btn small primary" (click)="setPaused(false)">Resume user streaming</button>
           } @else {
-            <button type="button" class="btn small danger" (click)="setPaused(true)">Pause all guest streams</button>
-            <span class="muted hint">Stops every guest stream and blocks new ones until you resume.</span>
+            <button type="button" class="btn small danger" (click)="setPaused(true)">Pause all user streams</button>
+            <span class="muted hint">Stops every user stream and blocks new ones until you resume.</span>
           }
         </div>
       </div>
@@ -91,10 +91,10 @@ import { LimitsEditor } from '../../shared/limits-editor';
           <div class="field">
             <label for="rs">Kept for the admin (%)</label>
             <input id="rs" type="number" min="0" max="90" [value]="s.adminReservePct" (input)="patch({ adminReservePct: +$any($event.target).value })" />
-            <span class="hint">Guests can never use this share of the upload budget.</span>
+            <span class="hint">Users can never use this share of the upload budget.</span>
           </div>
           <div class="field">
-            <label for="id">Stop guest streams with no viewers after (min)</label>
+            <label for="id">Stop user streams with no viewers after (min)</label>
             <input id="id" type="number" min="0" [value]="s.idleStopMinutes" (input)="patch({ idleStopMinutes: +$any($event.target).value })" />
             <span class="hint">0 = never.</span>
           </div>
@@ -105,9 +105,9 @@ import { LimitsEditor } from '../../shared/limits-editor';
           </div>
         </div>
 
-        <h3>Limits given to new guests</h3>
-        <p class="muted hint">Applies to guests created from now on. Existing guests keep theirs (edit them on the Guests page).</p>
-        <app-limits-editor [limits]="s.defaultLimits" (limitsChange)="patch({ defaultLimits: $event })" />
+        <p class="muted hint presets-note">
+          What each user may do (bitrate, viewers, rooms…) is set with <a routerLink="/dashboard/presets">limit presets</a>.
+        </p>
 
         <div class="row save">
           <button type="button" class="btn primary" (click)="save()" [disabled]="!dirty()">Save settings</button>
@@ -150,7 +150,7 @@ import { LimitsEditor } from '../../shared/limits-editor';
       i.admin {
         background: var(--accent);
       }
-      i.guest {
+      i.user {
         background: var(--good);
       }
       u {
@@ -172,7 +172,7 @@ import { LimitsEditor } from '../../shared/limits-editor';
       .admin {
         color: var(--accent);
       }
-      .guest {
+      .user {
         color: var(--good);
       }
     }
@@ -185,9 +185,8 @@ import { LimitsEditor } from '../../shared/limits-editor';
     .right {
       text-align: right;
     }
-    h3 {
-      margin: 1.4rem 0 0.2rem;
-      font-size: 1rem;
+    .presets-note {
+      margin: 1.2rem 0 0;
     }
     .save {
       margin-top: 1.2rem;
@@ -232,7 +231,7 @@ export class Bandwidth implements OnInit, OnDestroy {
     }
   }
 
-  protected patch(values: Partial<GlobalSettings> & { defaultLimits?: Limits }): void {
+  protected patch(values: Partial<GlobalSettings>): void {
     this.saved.set(false);
     this.draft.update((s) => (s ? { ...s, ...values } : s));
   }
@@ -251,9 +250,9 @@ export class Bandwidth implements OnInit, OnDestroy {
   }
 
   protected async setPaused(paused: boolean): Promise<void> {
-    if (paused && !confirm('Stop every guest stream and block new ones until you resume?')) return;
+    if (paused && !confirm('Stop every user stream and block new ones until you resume?')) return;
     try {
-      await this.api.put('/api/admin/settings', { guestStreamsPaused: paused });
+      await this.api.put('/api/admin/settings', { userStreamsPaused: paused });
       await this.refresh();
     } catch (e: any) {
       this.error.set(e.message);
