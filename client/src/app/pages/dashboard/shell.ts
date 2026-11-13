@@ -314,7 +314,7 @@ import { StreamerService } from '../../core/streamer.service';
     .menu .keyl {
       order: 7;
     }
-    @media (max-width: 820px) {
+    @media (max-width: 1100px) {
       header {
         flex-wrap: nowrap;
         gap: 0.6rem;
@@ -354,7 +354,14 @@ import { StreamerService } from '../../core/streamer.service';
         pointer-events: none;
         transition: opacity 0.2s ease, transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1), visibility 0s linear 0.25s;
         position: fixed;
-        inset: 0;
+        /* a side panel pinned to the right; full screen only on small widths (below) */
+        top: 0;
+        right: 0;
+        bottom: 0;
+        width: 340px;
+        max-width: 100%;
+        border-left: 1px solid var(--line);
+        box-shadow: -12px 0 32px rgba(0, 0, 0, 0.35);
         z-index: 30;
         flex-direction: column;
         align-items: stretch;
@@ -362,6 +369,15 @@ import { StreamerService } from '../../core/streamer.service';
         padding: 4.2rem 1rem 1.5rem;
         background: var(--panel);
         overflow-y: auto;
+      }
+      @media (max-width: 600px) {
+        .menu {
+          width: auto;
+          left: 0;
+          max-width: none;
+          border-left: 0;
+          box-shadow: none;
+        }
       }
       /* ANIM:menu-slide (open state) */
       .menu.open {
