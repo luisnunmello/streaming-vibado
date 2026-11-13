@@ -2,20 +2,23 @@
   display: block;
 }
 
+/* Cards flow in two columns (preview first), so the settings wrap around the preview instead of piling up on the right. */
 .layout {
-  display: grid;
-  grid-template-columns: minmax(0, 1.6fr) minmax(300px, 1fr);
-  gap: 1rem;
-  align-items: start;
+  column-count: 2;
+  column-gap: 1rem;
 
   @media (max-width: 960px) {
-    grid-template-columns: 1fr;
+    column-count: 1;
   }
 }
 
 .col {
-  display: grid;
-  gap: 1rem;
+  display: contents;
+}
+
+.layout .card {
+  break-inside: avoid;
+  margin-bottom: 1rem;
 }
 
 h2 small,
