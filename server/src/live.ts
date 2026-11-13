@@ -92,6 +92,12 @@ export class LiveService {
     return { live: this.isLive(rt), viewers: rt?.viewerIds.size ?? 0 };
   }
 
+  /** True while the user has a connection open (studio or viewer page). */
+  isUserOnline(userId: number): boolean {
+    for (const p of this.peers.values()) if (p.principal?.role === 'user' && p.principal.userId === userId) return true;
+    return false;
+  }
+
   /** Spatial layer cap the viewers of this room currently get (budget pressure lowers it for users). */
   layerCapFor(rt: RoomRuntime): number {
     return rt.room.ownerId === null ? 2 : this.budget.layerCap;

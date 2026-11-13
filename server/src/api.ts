@@ -418,7 +418,12 @@ ${String(req.body?.text ?? '').trim().slice(0, 600)}`);
         res.json({ rooms: room ? [roomView(room)] : [] });
         return;
       }
-      res.json({ rooms: (p.role === 'admin' ? listRooms() : listRooms(p.userId!)).map(roomView) });
+      // The admin's list hides rooms of users who are offline (not connected and not live).
+      const visible =
+        p.role === 'admin'
+          ? listRooms().filter((r) => r.ownerId === null || live.isUserOnline(r.ownerId) || live.info(r.id).live)
+          : listRooms(p.userId!);
+      res.json({ rooms: visible.map(roomView) });
     }),
   );
 
