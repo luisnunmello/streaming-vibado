@@ -79,7 +79,7 @@ import { absoluteUrl, copyText } from '../../core/util';
                   }
                   <button type="button" class="btn small" (click)="copyLink(r)">{{ copied() === r.id ? 'Copied!' : 'Copy link' }}</button>
                   <a class="btn small" [href]="r.link" target="_blank" rel="noopener">Open</a>
-                  <details class="more">
+                  <details class="more" (toggle)="placeMenu($event)">
                     <summary class="btn small">More</summary>
                     <div class="menu">
                       <button type="button" (click)="startRename(r)">Rename</button>
@@ -150,9 +150,9 @@ import { absoluteUrl, copyText } from '../../core/util';
         display: none;
       }
       .menu {
-        position: absolute;
+        position: fixed; // not clipped by the scrolling table wrapper; placed by placeMenu()
         right: 0;
-        top: calc(100% + 4px);
+        top: 0;
         z-index: 5;
         min-width: 230px;
         display: grid;
@@ -187,6 +187,25 @@ import { absoluteUrl, copyText } from '../../core/util';
   `,
 })
 export class Rooms implements OnInit, OnDestroy {
+  /** Puts the open "More" menu under its button, in viewport coordinates, and closes it when the page moves. */
+  protected placeMenu(ev: Event): void {
+    const details = ev.target as HTMLDetailsElement;
+    if (!details.open) return;
+    const menu = details.querySelector<HTMLElement>('.menu');
+    const btn = details.querySelector<HTMLElement>('summary');
+    if (!menu || !btn) return;
+    const r = btn.getBoundingClientRect();
+    menu.style.top = r.bottom + 4 + 'px';
+    menu.style.right = Math.max(8, window.innerWidth - r.right) + 'px';
+    const close = () => {
+      details.open = false;
+      window.removeEventListener('scroll', close, true);
+      window.removeEventListener('resize', close);
+    };
+    window.addEventListener('scroll', close, true);
+    window.addEventListener('resize', close);
+  }
+
   protected readonly auth = inject(AuthService);
   private readonly api = inject(ApiService);
 
