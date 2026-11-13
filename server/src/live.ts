@@ -427,7 +427,7 @@ export class LiveService {
 
   // ------------------------------------------------------------------ rooms
 
-  private async joinRoom(peer: Peer, d: { slug?: unknown; key?: unknown }) {
+  private async joinRoom(peer: Peer, d: { slug?: unknown; key?: unknown; takeover?: unknown }) {
     if (typeof d.slug !== 'string') throw new ClientError('Room not found');
     const room = getRoomBySlug(d.slug);
     const p = peer.principal;
@@ -473,8 +473,16 @@ export class LiveService {
 
     if (owner) {
       if (rt.ownerSocketId && rt.ownerSocketId !== peer.socket.id) {
-        this.maybeDestroy(rt);
-        throw new ClientError('This room is already open in another window');
+        const old = this.peers.get(rt.ownerSocketId);
+        if (!d.takeover || !old) {
+          this.maybeDestroy(rt);
+          throw new ClientError('This room is already open in another window');
+        }
+        // Move the studio here: the other window is told, its stream stops and it lets go of the room.
+        // (the new owner is set first so the room is not torn down while the old window lets go)
+        rt.ownerSocketId = peer.socket.id;
+        old.socket.emit('ownerTaken');
+        this.leaveRoom(old);
       }
       rt.ownerSocketId = peer.socket.id;
       peer.socket.join(`o:${room.id}`);
