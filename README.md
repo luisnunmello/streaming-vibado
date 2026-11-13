@@ -1,4 +1,4 @@
-﻿# Streaming
+# Streaming
 
 Screen sharing in the browser through an **SFU** (not peer-to-peer): a streamer publishes one stream to the server, and the server forwards it to every viewer.
 
@@ -7,17 +7,16 @@ Screen sharing in the browser through an **SFU** (not peer-to-peer): a streamer 
 - **Accounts:** the admin (master password) invites **users** with activation keys. Users create public or private rooms, stream in them, and can invite others with referral keys. Viewers need no account.
 
 ```
-streamer browser â”€â”€WebRTCâ”€â”€â–¶ mediasoup (server) â”€â”€WebRTCâ”€â”€â–¶ viewer browsers
-        â””â”€â”€â”€â”€ HTTPS / socket.io signaling via Express (behind nginx) â”€â”€â”€â”€â”˜
+streamer browser ──WebRTC──▶ mediasoup (server) ──WebRTC──▶ viewer browsers
+        └──── HTTPS / socket.io signaling via Express (behind nginx) ────┘
 ```
 
 ## Pages
 
 | Address | Who | What |
 |---|---|---|
-| `/` | everyone | Goes to `/dashboard/rooms` (visitors are asked to sign in first) |
-| `/lobbies` | everyone | Public rooms, live ones first |
-| `/r/<room>` | everyone | Watch a room. Private rooms need their secret link (`/r/<room>?key=â€¦`) |
+| `/`, `/dashboard/rooms` | everyone | The rooms page: visitors see the public rooms (live ones first); signed-in users also manage their own rooms. `/lobbies` redirects here |
+| `/r/<room>` | everyone | Watch a room. Private rooms need their secret link (`/r/<room>?key=…`) |
 | `/r/main` | everyone | The admin's permanent room |
 | `/login`, `/activate` | everyone | Sign in; activate an account with a key |
 | `/dashboard/rooms` | admin, users | Create, rename, make public/private, copy link, new secret link, stop, delete |
@@ -48,11 +47,11 @@ Tests: `npm --prefix server test` starts the real server against a temporary dat
 ## Accounts, keys and referrals
 
 1. **Admin** signs in as `admin` with the master password (change it under *Account*).
-2. **Admin â†’ Users â†’ New user:** enter a name, how many referrals the user may create, and (optionally) their limits. The server generates a random key such as `K7QM-2XWD-9PFA-R4TN`, shown **once**. Send it, or the activation link, to the person. Keys expire after 7 days and can be reissued.
+2. **Admin → Users → New user:** enter a name, how many referrals the user may create, and (optionally) their limits. The server generates a random key such as `K7QM-2XWD-9PFA-R4TN`, shown **once**. Send it, or the activation link, to the person. Keys expire after 7 days and can be reissued.
 3. **The user** opens the link (or `/activate`), enters the key and **chooses their own password**. They then sign in with their name and that password.
 4. **Referrals:** a user with a referral quota creates keys under *Referrals*. Each key lets one person create an account (they choose their own name and password). Revoking an unused key frees the slot; keys expire after 14 days.
 5. **Invited users** cannot invite anyone, and their limits can never exceed those of the user who invited them. Disabling a user can optionally disable everyone they invited.
-6. **Forgot a password?** Users: *Users â†’ Edit â†’ Reset password* gives a new activation key. Admin: see below.
+6. **Forgot a password?** Users: *Users → Edit → Reset password* gives a new activation key. Admin: see below.
 
 Keys are stored hashed, so they cannot be shown again after creation. Activation attempts are rate-limited.
 
@@ -86,7 +85,7 @@ The server also protects your connection as a whole: an upload budget with admis
 - **Change the shared window without stopping:** the *Change screen / window* button opens the picker again and swaps the picture (and screen audio) on the same connection. Viewers keep watching without interruption.
 - **Quick controls on the preview:** a small bar over the preview video has *Screen* (change the shared screen/window), *Mute*, a *Quality* dropdown (the quality presets) and *Stop*, plus a button that puts the preview in full screen with the bar still usable.
 - **Controls on your room's page:** when you open your own room's page (`/r/<room>`; the admin gets this on `/r/main`), a *Streamer controls* button shows the same bar over the video.
-  - **Studio â†’ "View in this tab":** the stream keeps running while you move around the dashboard and onto the room page, and everything works, including *Screen*. A *LIVE* chip in the dashboard header takes you back to the studio.
+  - **Studio → "View in this tab":** the stream keeps running while you move around the dashboard and onto the room page, and everything works, including *Screen*. A *LIVE* chip in the dashboard header takes you back to the studio.
   - **Room page opened in another tab:** it controls the studio tab. Mute, quality and Stop work directly. A browser only opens the screen picker for a click in the tab that owns the capture, so *Screen* asks the studio tab, which shows a *Choose new screen* button. Close the studio tab and the stream ends, as before.
 - **Live stats:** sent bitrate, fps, resolution, encode time, packet loss, RTT, and whether the encoder is limited by CPU or bandwidth.
 
@@ -139,13 +138,13 @@ Use a process manager (systemd, pm2) to keep it running. Node 22.13+ is required
 | `MEDIASOUP_ANNOUNCED_IP` | LAN IP | Address browsers send video to. **Set to the public IP in production.** |
 | `RTC_LISTEN_IP` | `0.0.0.0` | Interface to bind |
 | `ADMIN_PASSWORD` | generated | Master password, used only the first time |
-| `TRUST_PROXY` | â€“ | Set to `1` behind nginx so rate limiting and the per-IP cap see real client IPs |
+| `TRUST_PROXY` | – | Set to `1` behind nginx so rate limiting and the per-IP cap see real client IPs |
 | `DATA_DIR` | `server/data` (`/data` in Docker) | Database and settings |
 | `EGRESS_BUDGET_MBPS` | `500` | Starting upload budget (later edited on the Bandwidth page) |
 | `INGRESS_BUDGET_MBPS` | `800` | Starting download budget |
 | `RTC_INITIAL_BITRATE` | `8000000` | Starting bandwidth estimate per viewer (bps), so quality ramps up fast |
 | `RTC_MAX_INCOMING_BITRATE` | `60000000` | Cap on what the admin may send (bps) |
-| `TLS_KEY`, `TLS_CERT` | â€“ | Optional built-in HTTPS without nginx |
+| `TLS_KEY`, `TLS_CERT` | – | Optional built-in HTTPS without nginx |
 
 Budgets set on the *Bandwidth* page are stored in the database and take precedence over the environment values from then on.
 
@@ -156,7 +155,7 @@ Budgets set on the *Bandwidth* page are stored in the database and take preceden
 
 ## Capacity
 
-Server upload â‰ˆ `viewers Ã— bitrate`. At 1080p60 (~10 Mbps) a 500 Mbps budget serves roughly 45 viewers. One mediasoup worker (one CPU core) handles all media forwarding; spreading rooms over several cores is the natural next step when you need hundreds of viewers.
+Server upload ≈ `viewers × bitrate`. At 1080p60 (~10 Mbps) a 500 Mbps budget serves roughly 45 viewers. One mediasoup worker (one CPU core) handles all media forwarding; spreading rooms over several cores is the natural next step when you need hundreds of viewers.
 
 ## Status and known limits
 
