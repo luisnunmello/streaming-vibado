@@ -40,7 +40,7 @@ import { getGlobals, updateGlobals } from './globals.js';
 import { createPreset, deletePreset, listPresets, updatePreset } from './presets.js';
 import type { LiveService } from './live.js';
 import { checkNewPassword } from './password.js';
-import { countRooms, createRoom, deleteRoom, getRoomById, getRoomBySlug, listPublicRooms, listRooms, updateRoom, type Room } from './rooms.js';
+import { autoRoomName, countRooms, createRoom, deleteRoom, getRoomById, getRoomBySlug, listPublicRooms, listRooms, updateRoom, type Room } from './rooms.js';
 import { setPassword as setMasterPassword, verifyPassword as verifyMasterPassword } from './settings.js';
 
 type Handler = (req: Request, res: Response) => unknown | Promise<unknown>;
@@ -126,6 +126,7 @@ export function buildApi(live: LiveService, budget: BudgetManager): Router {
       visibility: r.visibility,
       ownerId: r.ownerId,
       ownerName: userName(r.ownerId),
+      autoName: r.ownerId !== null && r.name === autoRoomName(userName(r.ownerId)),
       createdAt: r.createdAt,
       live: info.live,
       viewers: info.viewers,
@@ -180,6 +181,7 @@ export function buildApi(live: LiveService, budget: BudgetManager): Router {
         slug: r.slug,
         name: r.name,
         ownerName: r.ownerName,
+        autoName: r.name === autoRoomName(r.ownerName),
         ...live.info(r.id),
       }));
       rooms.sort((a, b) => Number(b.live) - Number(a.live) || b.viewers - a.viewers || a.name.localeCompare(b.name));
@@ -198,7 +200,7 @@ export function buildApi(live: LiveService, budget: BudgetManager): Router {
       // `mine`: the caller is signed in and owns this room (the admin owns the main room), so the viewer page can offer streamer controls.
       const caller = getSession(bearer(req));
       const mine = !!caller && ((caller.role === 'admin' && room.ownerId === null) || (caller.role === 'user' && caller.userId === room.ownerId));
-      res.json({ name: room.name, slug: room.slug, ownerName: owner?.name ?? 'Admin', visibility: room.visibility, mine, ...live.info(room.id) });
+      res.json({ name: room.name, slug: room.slug, ownerName: owner?.name ?? 'Admin', autoName: !!owner && room.name === autoRoomName(owner.name), visibility: room.visibility, mine, ...live.info(room.id) });
     }),
   );
 
@@ -315,6 +317,7 @@ export function buildApi(live: LiveService, budget: BudgetManager): Router {
       const p = principalOf(res);
       if (p.role !== 'user') throw new HttpError(403, 'The administrator name cannot be changed');
       const user = renameUser(p.userId!, req.body?.name);
+      for (const r of listRooms(user.id)) live.updateRoomSnapshot(r);
       res.json({ name: user.name });
     }),
   );
@@ -389,12 +392,15 @@ export function buildApi(live: LiveService, budget: BudgetManager): Router {
     wrap((req, res) => {
       const p = principalOf(res);
       const ownerId = p.role === 'admin' ? null : p.userId!;
+      let roomName: unknown = req.body?.name;
       if (ownerId !== null) {
-        const limits = getUser(ownerId)!.limits;
+        const owner = getUser(ownerId)!;
+        const limits = owner.limits;
+        if (limits.maxRooms === 1) roomName = autoRoomName(owner.name); // a single room is named after its owner
         if (countRooms(ownerId) >= limits.maxRooms) throw new HttpError(403, `You can have at most ${limits.maxRooms} room(s)`);
         if (req.body?.visibility === 'public' && !limits.allowPublicRooms) throw new HttpError(403, 'Public rooms are not allowed for your account');
       }
-      res.status(201).json({ room: roomView(createRoom(ownerId, req.body?.name, req.body?.visibility)) });
+      res.status(201).json({ room: roomView(createRoom(ownerId, roomName, req.body?.visibility)) });
     }),
   );
 
@@ -405,6 +411,9 @@ export function buildApi(live: LiveService, budget: BudgetManager): Router {
       const room = manageable(res, String(req.params['id']));
       const p = principalOf(res);
       const body = req.body ?? {};
+      if (p.role === 'user' && body.name !== undefined && getUser(p.userId!)!.limits.maxRooms === 1) {
+        throw new HttpError(400, 'Your room is named after you, so its name cannot be changed');
+      }
       if (room.slug === 'main' && body.visibility === 'private') throw new HttpError(400, 'The main room is always public');
       if (p.role === 'user' && body.visibility === 'public' && !getUser(p.userId!)!.limits.allowPublicRooms) {
         throw new HttpError(403, 'Public rooms are not allowed for your account');

@@ -5,24 +5,37 @@ import { ApiService } from '../../core/api.service';
 import { DialogService } from '../../core/dialog.service';
 import { AuthService } from '../../core/auth.service';
 import type { RoomView } from '../../core/models';
+import { I18nService, TPipe } from '../../core/i18n.service';
+import { ShareService } from '../../core/share.service';
 import { absoluteUrl, copyText } from '../../core/util';
 
 @Component({
   selector: 'app-rooms',
-  imports: [FormsModule, RouterLink],
+  imports: [FormsModule, RouterLink, TPipe],
   template: `
-    <h1 class="page-title">Rooms</h1>
+    <div class="head">
+      <h1 class="page-title">Rooms</h1>
+      <button type="button" class="btn primary" [disabled]="sharing()" (click)="share()">{{ 'Share screen' | t }}</button>
+    </div>
 
     <div class="card create">
       <h2>New room</h2>
+      @if (singleRoom() && ownCount() >= 1) {
+        <p class="muted">Your account has a single room, named after you. You can change its privacy in the list below.</p>
+      } @else {
       <form class="row" (ngSubmit)="create()">
-        <input type="text" name="name" [(ngModel)]="newName" placeholder="Room name" maxlength="40" required />
+        @if (!singleRoom()) {
+          <input type="text" name="name" [(ngModel)]="newName" placeholder="Room name" maxlength="40" required />
+        } @else {
+          <b class="autoname">{{ i18n.t("{name}'s room", { name: auth.me()?.name ?? '' }) }}</b>
+        }
         <select name="vis" [(ngModel)]="newVisibility">
           <option value="public" [disabled]="!canPublic()">Public (listed in the lobby)</option>
           <option value="private">Private (secret link)</option>
         </select>
-        <button class="btn primary" type="submit" [disabled]="busy() || !newName.trim() || full()">Create room</button>
+        <button class="btn primary" type="submit" [disabled]="busy() || (!singleRoom() && !newName.trim()) || full()">Create room</button>
       </form>
+      }
       @if (auth.me()?.limits; as l) {
         <p class="muted hint">You are using {{ ownCount() }} of {{ l.maxRooms }} rooms.</p>
       }
@@ -56,7 +69,7 @@ import { absoluteUrl, copyText } from '../../core/util';
                       <button class="btn small" type="button" (click)="editing.set(null)">Cancel</button>
                     </form>
                   } @else {
-                    <b>{{ r.name }}</b>
+                    <b>{{ i18n.roomName(r) }}</b>
                     <div class="muted slug">/r/{{ r.slug }}</div>
                   }
                 </td>
@@ -83,7 +96,9 @@ import { absoluteUrl, copyText } from '../../core/util';
                   <details class="more" (toggle)="placeMenu($event)">
                     <summary class="btn small">More</summary>
                     <div class="menu">
-                      <button type="button" (click)="startRename(r)">Rename</button>
+                      @if (!singleRoom()) {
+                        <button type="button" (click)="startRename(r)">Rename</button>
+                      }
                       @if (r.slug !== 'main') {
                         <button type="button" (click)="toggleVisibility(r)" [disabled]="r.visibility === 'private' && !canPublicFor(r)">
                           Make {{ r.visibility === 'public' ? 'private' : 'public' }}
@@ -114,6 +129,17 @@ import { absoluteUrl, copyText } from '../../core/util';
     </div>
   `,
   styles: `
+    .head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+    .autoname {
+      flex: 1;
+      align-self: center;
+    }
     .create {
       margin-bottom: 1rem;
       input[type='text'] {
@@ -223,6 +249,11 @@ export class Rooms implements OnInit, OnDestroy {
 
   protected readonly ownCount = computed(() => this.rooms().filter((r) => this.isMine(r)).length);
   protected readonly canPublic = computed(() => this.auth.me()?.limits?.allowPublicRooms !== false);
+  protected readonly i18n = inject(I18nService);
+  private readonly shareSvc = inject(ShareService);
+  protected readonly sharing = signal(false);
+  /** A user who may have only one room gets it named after them; only its privacy is configurable. */
+  protected readonly singleRoom = computed(() => this.auth.me()?.role === 'user' && this.auth.me()?.limits?.maxRooms === 1);
   protected readonly full = computed(() => {
     const l = this.auth.me()?.limits;
     return !!l && this.ownCount() >= l.maxRooms;
@@ -266,10 +297,22 @@ export class Rooms implements OnInit, OnDestroy {
     }
   }
 
+  protected async share(): Promise<void> {
+    this.sharing.set(true);
+    this.error.set(null);
+    try {
+      await this.shareSvc.shareScreen();
+    } catch (e: any) {
+      this.error.set(e.message ?? String(e));
+    } finally {
+      this.sharing.set(false);
+    }
+  }
+
   protected async create(): Promise<void> {
     this.busy.set(true);
     await this.act(async () => {
-      await this.api.post('/api/rooms', { name: this.newName, visibility: this.newVisibility });
+      await this.api.post('/api/rooms', { name: this.singleRoom() ? '' : this.newName, visibility: this.newVisibility });
       this.newName = '';
     });
     this.busy.set(false);

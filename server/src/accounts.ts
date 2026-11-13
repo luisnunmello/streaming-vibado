@@ -1,3 +1,4 @@
+import { autoRoomName } from './rooms.js';
 import { all, currentMonth, get, run, tx } from './db.js';
 import { HttpError } from './errors.js';
 import { hashKey, keyHint, newKey, normalizeKey } from './keys.js';
@@ -165,7 +166,10 @@ export function renameUser(id: number, nameInput: unknown): User {
   const name = validateName(nameInput);
   const taken = get<{ id: number }>('SELECT id FROM users WHERE name = ?', name);
   if (taken && taken.id !== id) throw new HttpError(409, 'That name is already taken');
+  const old = get<{ name: string }>('SELECT name FROM users WHERE id = ?', id)?.name;
   run('UPDATE users SET name = ? WHERE id = ?', name, id);
+  // a room named after its owner follows the new name
+  if (old && old !== name) run('UPDATE rooms SET name = ? WHERE owner_id = ? AND name = ?', autoRoomName(name), id, autoRoomName(old));
   return getUser(id)!;
 }
 

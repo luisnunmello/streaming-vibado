@@ -37,6 +37,9 @@ const toRoom = (r: RoomRow): Room => ({
   createdAt: r.created_at,
 });
 
+/** The fixed name of the room of a user who may only have one room ("Fernando's room"). */
+export const autoRoomName = (ownerName: string): string => `${ownerName}'s room`;
+
 export function validateRoomName(name: unknown): string {
   if (typeof name !== 'string') throw new HttpError(400, 'A room name is required');
   const n = name.trim().replace(/\s+/g, ' ');

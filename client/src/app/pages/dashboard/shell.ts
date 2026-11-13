@@ -3,11 +3,15 @@ import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/rou
 import { Account } from './account';
 import { Appeal } from './appeal';
 import { AuthService } from '../../core/auth.service';
+import { DialogService } from '../../core/dialog.service';
+import { I18nService, TPipe } from '../../core/i18n.service';
+import { ShareService } from '../../core/share.service';
+import { LangSwitch } from '../../shared/lang-switch';
 import { StreamerService } from '../../core/streamer.service';
 
 @Component({
   selector: 'app-shell',
-  imports: [RouterLink, RouterLinkActive, RouterOutlet, Account, Appeal],
+  imports: [RouterLink, RouterLinkActive, RouterOutlet, Account, Appeal, LangSwitch, TPipe],
   template: `
     <header>
       <a routerLink="/" class="brand">Streaming</a>
@@ -29,7 +33,11 @@ import { StreamerService } from '../../core/streamer.service';
           <i></i> LIVE · {{ room.name }}
         </a>
       }
+      @if (!auth.me()?.restricted) {
+        <button type="button" class="btn small primary" [disabled]="sharing" (click)="share()" title="Go straight to your studio and pick a screen to share">{{ 'Share screen' | t }}</button>
+      }
       <a routerLink="/lobbies" class="link">Public rooms</a>
+      <app-lang-switch />
       <span class="who">{{ auth.me()?.name }} <span class="badge">{{ auth.me()?.role }}</span></span>
       <button type="button" class="btn small" (click)="logout()">Sign out</button>
     </header>
@@ -207,6 +215,21 @@ export class Shell implements OnInit, OnDestroy {
   }
 
   protected tab: 'appeal' | 'account' = 'appeal';
+  protected sharing = false;
+  private readonly shareSvc = inject(ShareService);
+  private readonly dialog = inject(DialogService);
+  private readonly i18n = inject(I18nService);
+
+  protected async share(): Promise<void> {
+    this.sharing = true;
+    try {
+      await this.shareSvc.shareScreen();
+    } catch (e: any) {
+      await this.dialog.ask({ title: this.i18n.t('Could not start sharing'), message: e.message ?? String(e), confirmLabel: this.i18n.t('OK'), cancelLabel: this.i18n.t('Close') });
+    } finally {
+      this.sharing = false;
+    }
+  }
 
   protected async returnToAdmin(): Promise<void> {
     await this.streamer.leave(); // anything started as the user ends here

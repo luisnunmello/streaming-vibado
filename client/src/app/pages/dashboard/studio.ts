@@ -4,17 +4,19 @@ import { StreamerPanel } from '../../admin/streamer-panel';
 import { ApiService } from '../../core/api.service';
 import { AuthService } from '../../core/auth.service';
 import type { RoomView } from '../../core/models';
+import { I18nService, TPipe } from '../../core/i18n.service';
+import { ShareService } from '../../core/share.service';
 import { StreamerService } from '../../core/streamer.service';
 import { absoluteUrl, copyText } from '../../core/util';
 
 @Component({
   selector: 'app-studio',
-  imports: [StreamerPanel, RouterLink],
+  imports: [StreamerPanel, RouterLink, TPipe],
   template: `
     <div class="row head">
       <a routerLink="/dashboard/rooms" class="btn small">← Rooms</a>
       @if (room(); as r) {
-        <h1>{{ r.name }}</h1>
+        <h1>{{ i18n.roomName(r) }}</h1>
         <span class="badge" [class.good]="r.visibility === 'public'">{{ r.visibility }}</span>
         <span class="spacer"></span>
         <button type="button" class="btn small" (click)="copy(r)">{{ copied() ? 'Copied!' : 'Copy viewer link' }}</button>
@@ -53,6 +55,8 @@ export class Studio implements OnInit, OnDestroy {
   private readonly api = inject(ApiService);
   private readonly auth = inject(AuthService);
   private readonly streamer = inject(StreamerService);
+  private readonly shareSvc = inject(ShareService);
+  protected readonly i18n = inject(I18nService);
 
   protected readonly loading = signal(true);
   protected readonly error = signal<string | null>(null);
@@ -71,10 +75,18 @@ export class Studio implements OnInit, OnDestroy {
           void this.router.navigate(['/login']);
         });
       }
+      this.shareSvc.remember(slug);
     } catch (e: any) {
       this.error.set(e.message);
     } finally {
       this.loading.set(false);
+    }
+    // Arrived through a "Share screen" button: open the screen picker right away. If the browser no longer
+    // counts the click as a gesture it refuses quietly and the Start button is there as usual.
+    if (this.route.snapshot.queryParamMap.has('share') && !this.error() && this.streamer.state() === 'idle') {
+      await this.streamer.start(this.streamer.settings());
+      if (this.streamer.error() === 'Screen sharing was cancelled.') this.streamer.error.set(null);
+      void this.router.navigate([], { queryParams: {}, replaceUrl: true });
     }
   }
 

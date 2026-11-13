@@ -1,10 +1,12 @@
 import { Component, inject } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { AuthService } from '../core/auth.service';
+import { TPipe } from '../core/i18n.service';
+import { LangSwitch } from './lang-switch';
 
 @Component({
   selector: 'app-topbar',
-  imports: [RouterLink],
+  imports: [RouterLink, LangSwitch, TPipe],
   template: `
     <header>
       <a routerLink="/" class="brand">Streaming</a>
@@ -12,6 +14,7 @@ import { AuthService } from '../core/auth.service';
         <a routerLink="/lobbies">Public rooms</a>
       </nav>
       <span class="spacer"></span>
+      <app-lang-switch />
       @if (auth.me(); as me) {
         <a routerLink="/dashboard" class="btn small">{{ me.name }} · Dashboard</a>
       } @else {

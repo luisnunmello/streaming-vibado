@@ -32,6 +32,8 @@ export interface Me {
 }
 
 export interface RoomView {
+  /** True when the name is just "<owner>'s room" (a user with a single room). */
+  autoName?: boolean;
   id: string;
   slug: string;
   name: string;

@@ -7,7 +7,7 @@ import { config } from './config.js';
 import { getSession, onRevoke, type Principal } from './auth.js';
 import { getGlobals } from './globals.js';
 import type { Limits } from './limits.js';
-import { deleteRoom, getRoomById, getRoomBySlug, type Room } from './rooms.js';
+import { autoRoomName, deleteRoom, getRoomById, getRoomBySlug, type Room } from './rooms.js';
 import type { Sfu } from './sfu.js';
 
 type Ack = (res: { ok: true; [k: string]: unknown } | { ok: false; error: string }) => void;
@@ -484,7 +484,7 @@ export class LiveService {
     this.emitViewerCount(rt);
 
     return {
-      room: { slug: room.slug, name: room.name, visibility: room.visibility, ownerName: ownerUser?.name ?? 'Admin' },
+      room: { slug: room.slug, name: room.name, visibility: room.visibility, ownerName: ownerUser?.name ?? 'Admin', autoName: !!ownerUser && room.name === autoRoomName(ownerUser.name) },
       role: owner ? 'owner' : 'viewer',
       live: this.isLive(rt),
       rtpCapabilities: rt.router.rtpCapabilities,

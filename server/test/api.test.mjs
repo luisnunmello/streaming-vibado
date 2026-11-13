@@ -646,3 +646,19 @@ describe('lifting only what a restriction caused', () => {
     assert.equal(s[a].restricted, true, 'not caused by the boss: stays');
   });
 });
+
+describe('one-room users', () => {
+  it('names the only room after its owner, keeps it in sync on rename, and does not allow a custom name', async () => {
+    const admin = await login('admin', 'new-master-pass-1');
+    const r = await api('POST', '/api/admin/users', { token: admin, body: { name: 'solo1', limits: { maxRooms: 1 } } });
+    const a = await api('POST', '/api/activate', { body: { key: r.key, password: 'solo1-password-1' } });
+    const made = await api('POST', '/api/rooms', { token: a.token, body: { name: 'Ignored name', visibility: 'private' } });
+    assert.equal(made.status, 201);
+    assert.equal(made.room.name, "solo1's room");
+    assert.equal(made.room.autoName, true);
+    assert.equal((await api('PATCH', `/api/rooms/${made.room.id}`, { token: a.token, body: { name: 'Other' } })).status, 400);
+    assert.equal((await api('PUT', '/api/me/name', { token: a.token, body: { name: 'solo2' } })).status, 200);
+    const rooms = (await api('GET', '/api/rooms', { token: a.token })).rooms;
+    assert.equal(rooms[0].name, "solo2's room");
+  });
+});
