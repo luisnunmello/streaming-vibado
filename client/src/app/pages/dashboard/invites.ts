@@ -102,7 +102,7 @@ import { Modal } from '../../shared/modal';
         </div>
       </div>
     } @else if (loaded() && cap() > 0) {
-      <p class="muted">{{ 'No invites yet.' | t }}</p>
+      <p class="muted">{{ 'No active invites.' | t }}</p>
     }
   `,
   styles: `
@@ -166,7 +166,8 @@ export class Invites implements OnInit, OnDestroy {
     try {
       const r = await this.api.get<{ cap: number; invites: InviteView[] }>('/api/me/invites');
       this.cap.set(r.cap);
-      this.invites.set(r.invites);
+      // only invites that can still be used: waiting to be opened, or running now
+      this.invites.set(r.invites.filter((i) => i.status === 'waiting' || i.status === 'active'));
       const me = this.auth.me();
       const { rooms } = await this.api.get<{ rooms: RoomView[] }>('/api/rooms');
       this.rooms.set(rooms.filter((x) => (me?.role === 'admin' ? x.ownerId === null : x.ownerId === me?.userId)));

@@ -42,7 +42,7 @@ export const PT: Record<string, string> = {
   'How long they can use it (minutes)': 'Por quanto tempo ela pode usar (minutos)',
   'up to {n}': 'até {n}',
   'The time starts when they open the link. They stream with your limits and only in this room.': 'O tempo começa quando a pessoa abre o link. Ela transmite com os seus limites e somente nesta sala.',
-  'No invites yet.': 'Nenhum convite ainda.',
+  'No active invites.': 'Nenhum convite ativo.',
   'Time': 'Tempo',
   'waiting': 'aguardando',
   'active': 'ativo',
