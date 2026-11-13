@@ -1,12 +1,13 @@
 import { Component, OnDestroy, OnInit, inject } from '@angular/core';
 import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { Account } from './account';
+import { Appeal } from './appeal';
 import { AuthService } from '../../core/auth.service';
 import { StreamerService } from '../../core/streamer.service';
 
 @Component({
   selector: 'app-shell',
-  imports: [RouterLink, RouterLinkActive, RouterOutlet, Account],
+  imports: [RouterLink, RouterLinkActive, RouterOutlet, Account, Appeal],
   template: `
     <header>
       <a routerLink="/" class="brand">Streaming</a>
@@ -16,7 +17,7 @@ import { StreamerService } from '../../core/streamer.service';
           <a routerLink="/dashboard/referrals" routerLinkActive="on">Referrals</a>
         }
         @if (auth.isAdmin()) {
-          <a routerLink="/dashboard/users" routerLinkActive="on">Users</a>
+          <a routerLink="/dashboard/users" routerLinkActive="on">Users@if ((auth.me()?.pendingAppeals ?? 0) > 0) { <span class="badge warn" title="Appeals waiting for an answer">{{ auth.me()?.pendingAppeals }}</span> }</a>
           <a routerLink="/dashboard/presets" routerLinkActive="on">Presets</a>
           <a routerLink="/dashboard/bandwidth" routerLinkActive="on">Bandwidth</a>
         }
@@ -45,13 +46,41 @@ import { StreamerService } from '../../core/streamer.service';
           <p>Reason: {{ auth.me()?.restrictedReason || 'No reason was given.' }}</p>
           <p class="small">Contact the administrator if you think this is a mistake. You can still change your name and password and sign out.</p>
         </div>
-        <app-account />
+        <div class="tabs" role="tablist">
+          <button type="button" role="tab" [class.on]="tab === 'appeal'" (click)="tab = 'appeal'">
+            Appeal @if (auth.me()?.appealStatus === 'pending') { <span class="badge warn">sent</span> }
+          </button>
+          <button type="button" role="tab" [class.on]="tab === 'account'" (click)="tab = 'account'">Account</button>
+        </div>
+        @if (tab === 'appeal') {
+          <app-appeal />
+        } @else {
+          <app-account />
+        }
       } @else {
         <router-outlet />
       }
     </main>
   `,
   styles: `
+    .tabs {
+      display: flex;
+      gap: 0.3rem;
+      margin-bottom: 1rem;
+      button {
+        padding: 0.45rem 1rem;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--panel);
+        color: var(--muted);
+        font: inherit;
+        cursor: pointer;
+        &.on {
+          color: var(--text);
+          border-color: var(--accent);
+        }
+      }
+    }
     .usingbar {
       position: sticky;
       top: 0;
@@ -176,6 +205,8 @@ export class Shell implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     clearInterval(this.timer);
   }
+
+  protected tab: 'appeal' | 'account' = 'appeal';
 
   protected async returnToAdmin(): Promise<void> {
     await this.streamer.leave(); // anything started as the user ends here

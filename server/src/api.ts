@@ -4,6 +4,9 @@ import {
   authenticate,
   changeOwnPassword,
   renameUser,
+  submitAppeal,
+  denyAppeal,
+  countPendingAppeals,
   setRestriction,
   createUser,
   createReferral,
@@ -65,7 +68,7 @@ const principalOf = (res: Response): Principal => res.locals['principal'];
 const tokenOf = (res: Response): string => res.locals['token'];
 
 /** What a restricted user may still do: see who they are (and why), change their login, sign out. */
-const RESTRICTED_OK = new Set(['/me', '/me/name', '/me/password', '/logout']);
+const RESTRICTED_OK = new Set(['/me', '/me/name', '/me/password', '/me/appeal', '/logout']);
 
 function requireAuth(req: Request, res: Response, next: NextFunction): void {
   const token = bearer(req);
@@ -137,6 +140,9 @@ export function buildApi(live: LiveService, budget: BudgetManager): Router {
     status: g.status,
     restricted: g.restricted,
     restrictedReason: g.restrictedReason,
+    appealStatus: g.appealStatus,
+    appealText: g.appealText,
+    appealAt: g.appealAt,
     limits: g.limits,
     presetId: g.presetId,
     presetName: g.presetName,
@@ -268,7 +274,7 @@ export function buildApi(live: LiveService, budget: BudgetManager): Router {
     wrap((_req, res) => {
       const p = principalOf(res);
       if (p.role === 'admin') {
-        res.json({ role: 'admin', name: 'admin', limits: null });
+        res.json({ role: 'admin', name: 'admin', limits: null, pendingAppeals: countPendingAppeals() });
         return;
       }
       const g = getUser(p.userId!);
@@ -279,11 +285,25 @@ export function buildApi(live: LiveService, budget: BudgetManager): Router {
         name: g.name,
         restricted: g.restricted,
         restrictedReason: g.restrictedReason,
+        appealStatus: g.appealStatus,
+        appealText: g.appealText,
+        appealReply: g.appealReply,
         limits: g.limits,
         referrals: { quota: g.referralQuota, used: referralsUsed(g.id) },
         monthBytes: monthlyBytes(g.id),
         invitedByName: g.invitedBy ? userName(g.invitedBy) : null,
       });
+    }),
+  );
+
+  api.post(
+    '/me/appeal',
+    requireAuth,
+    wrap((req, res) => {
+      const p = principalOf(res);
+      if (p.role !== 'user') throw new HttpError(403, 'Only users can appeal');
+      submitAppeal(p.userId!, req.body?.text);
+      res.json({ ok: true });
     }),
   );
 
@@ -483,6 +503,15 @@ export function buildApi(live: LiveService, budget: BudgetManager): Router {
     const by = getUser(id)?.invitedBy;
     return by ? [by] : [];
   };
+
+  api.post(
+    '/admin/users/:id/appeal/deny',
+    requireAdmin,
+    wrap((req, res) => {
+      denyAppeal(idParam(req), req.body?.reply);
+      res.json({ users: listUsers().map(userView) });
+    }),
+  );
 
   api.post(
     '/admin/users/:id/restrict',

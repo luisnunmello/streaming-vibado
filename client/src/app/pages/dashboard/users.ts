@@ -121,6 +121,9 @@ const CUSTOM = 'custom';
                   @if (u.restricted) {
                     <span class="badge bad" [title]="u.restrictedReason">restricted</span>
                   }
+                  @if (u.appealStatus === 'pending') {
+                    <span class="badge warn" title="This user appealed their restriction. Open Edit to read it.">appeal</span>
+                  }
                   <span class="badge" [class.good]="u.status === 'active'" [class.warn]="u.status === 'pending'" [class.bad]="u.status === 'disabled'">{{ u.status }}</span>
                 </td>
                 <td>
@@ -169,6 +172,20 @@ const CUSTOM = 'custom';
                       @if (u.restricted) {
                         <div class="restrictbox">
                           <p><b>Restricted:</b> {{ u.restrictedReason }}</p>
+                          @if (u.appealStatus === 'pending') {
+                            <div class="appealbox">
+                              <b>Appeal from {{ u.name }}</b> <span class="muted">{{ ago(u.appealAt) }}</span>
+                              <blockquote>{{ u.appealText }}</blockquote>
+                              <div class="field">
+                                <label [for]="'dr' + u.id">Reply if you deny it (shown to them)</label>
+                                <input [id]="'dr' + u.id" type="text" maxlength="500" [value]="denyReply()" (input)="denyReply.set($any($event.target).value)" />
+                              </div>
+                              <button type="button" class="btn small" (click)="denyAppeal(u)">Deny appeal</button>
+                              <span class="muted hint">To accept it, use "Lift restriction" below.</span>
+                            </div>
+                          } @else if (u.appealStatus === 'denied') {
+                            <p class="muted">Appeal denied. They can send a new one.</p>
+                          }
                           <label class="check"><input type="checkbox" [checked]="optChildren()" (change)="optChildren.set($any($event.target).checked)" /> Also lift it for everyone they referred (and the people those referred…)</label>
                           <label class="check"><input type="checkbox" [checked]="optParents()" (change)="optParents.set($any($event.target).checked)" /> Also lift it for who referred them</label>
                           <button type="button" class="btn small" (click)="unrestrict(u)">Lift restriction</button>
@@ -216,6 +233,25 @@ const CUSTOM = 'custom';
     </div>
   `,
   styles: `
+    .appealbox {
+      display: grid;
+      gap: 0.5rem;
+      justify-items: start;
+      width: 100%;
+      padding: 0.6rem 0.8rem;
+      border: 1px solid var(--warn);
+      border-radius: 8px;
+      blockquote {
+        margin: 0;
+        padding: 0.4rem 0.7rem;
+        border-left: 3px solid var(--warn);
+        background: var(--panel);
+        white-space: pre-wrap;
+      }
+      .field {
+        width: 100%;
+      }
+    }
     .restrictbox {
       margin: 0.8rem 0;
       padding: 0.7rem 0.9rem;
@@ -287,6 +323,7 @@ export class Users implements OnInit, OnDestroy {
   protected readonly editChoice = signal('');
   protected readonly editLimits = signal<Limits | null>(null);
   protected readonly editQuota = signal(0);
+  protected readonly denyReply = signal('');
   protected readonly restrictReason = signal('');
   protected readonly optChildren = signal(true);
   protected readonly optParents = signal(false);
@@ -480,6 +517,14 @@ export class Users implements OnInit, OnDestroy {
     return this.act(async () => {
       await this.api.post(`/api/admin/users/${u.id}/restrict`, { reason: this.restrictReason().trim(), children: kids, parents });
       this.restrictReason.set('');
+      this.editing.set(null);
+    });
+  }
+
+  protected denyAppeal(u: UserView): Promise<void> {
+    return this.act(async () => {
+      await this.api.post(`/api/admin/users/${u.id}/appeal/deny`, { reply: this.denyReply().trim() });
+      this.denyReply.set('');
       this.editing.set(null);
     });
   }

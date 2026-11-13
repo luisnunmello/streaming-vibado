@@ -587,3 +587,30 @@ describe('watching several streams at once', () => {
     for (const s of [w1, w2, w3, x1, x2]) s.socket.close();
   });
 });
+
+describe('appeals', () => {
+  it('a restricted user can appeal; the admin sees it, can deny with a reply, or lift the restriction', async () => {
+    const admin = await login('admin', 'new-master-pass-1');
+    const r = await api('POST', '/api/admin/users', { token: admin, body: { name: 'appealer' } });
+    const a = await api('POST', '/api/activate', { body: { key: r.key, password: 'appealer-password-1' } });
+    assert.equal((await api('POST', '/api/me/appeal', { token: a.token, body: { text: 'please' } })).status, 400, 'not restricted yet');
+    await api('POST', `/api/admin/users/${r.user.id}/restrict`, { token: admin, body: { reason: 'test' } });
+    assert.equal((await api('POST', '/api/me/appeal', { token: a.token, body: { text: 'no' } })).status, 400, 'too short');
+    assert.equal((await api('POST', '/api/me/appeal', { token: a.token, body: { text: 'It was a mistake, sorry.' } })).status, 200);
+    assert.equal((await api('POST', '/api/me/appeal', { token: a.token, body: { text: 'Again and again.' } })).status, 409, 'one at a time');
+    const me = await api('GET', '/api/me', { token: a.token });
+    assert.equal(me.appealStatus, 'pending');
+    assert.ok((await api('GET', '/api/me', { token: admin })).pendingAppeals >= 1);
+    const list = await api('GET', '/api/admin/users', { token: admin });
+    assert.equal(list.users.find((u) => u.id === r.user.id).appealText, 'It was a mistake, sorry.');
+
+    await api('POST', `/api/admin/users/${r.user.id}/appeal/deny`, { token: admin, body: { reply: 'Not yet.' } });
+    const denied = await api('GET', '/api/me', { token: a.token });
+    assert.deepEqual([denied.appealStatus, denied.appealReply], ['denied', 'Not yet.']);
+    assert.equal((await api('POST', '/api/me/appeal', { token: a.token, body: { text: 'Second try, please.' } })).status, 200, 'can appeal again');
+
+    await api('POST', `/api/admin/users/${r.user.id}/unrestrict`, { token: admin, body: {} });
+    const clear = await api('GET', '/api/me', { token: a.token });
+    assert.deepEqual([clear.restricted, clear.appealStatus], [false, '']);
+  });
+});

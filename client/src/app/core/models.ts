@@ -24,6 +24,11 @@ export interface Me {
   /** Can sign in but may not use the service. */
   restricted?: boolean;
   restrictedReason?: string;
+  appealStatus?: '' | 'pending' | 'denied';
+  appealText?: string;
+  appealReply?: string;
+  /** Admin only: appeals waiting for an answer. */
+  pendingAppeals?: number;
 }
 
 export interface RoomView {
@@ -63,6 +68,9 @@ export interface UserView {
   invitedByName: string | null;
   restricted: boolean;
   restrictedReason: string;
+  appealStatus: '' | 'pending' | 'denied';
+  appealText: string;
+  appealAt: number | null;
   createdAt: number;
   activatedAt: number | null;
   lastSeen: number | null;

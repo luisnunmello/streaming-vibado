@@ -28,6 +28,11 @@ export interface User {
   /** Can sign in, but may not use the service; `restrictedReason` is shown to them. */
   restricted: boolean;
   restrictedReason: string;
+  /** '' = no appeal, 'pending' = waiting for the admin, 'denied' = the admin said no (see appealReply). */
+  appealStatus: '' | 'pending' | 'denied';
+  appealText: string;
+  appealAt: number | null;
+  appealReply: string;
 }
 
 interface UserRow {
@@ -44,6 +49,10 @@ interface UserRow {
   last_seen: number | null;
   restricted: number;
   restricted_reason: string;
+  appeal_text: string;
+  appeal_at: number | null;
+  appeal_status: '' | 'pending' | 'denied';
+  appeal_reply: string;
 }
 
 interface KeyRow {
@@ -90,6 +99,10 @@ const toUser = (r: UserRow): User => {
     lastSeen: r.last_seen,
     restricted: r.restricted === 1,
     restrictedReason: r.restricted_reason,
+    appealStatus: r.appeal_status,
+    appealText: r.appeal_text,
+    appealAt: r.appeal_at,
+    appealReply: r.appeal_reply,
   };
 };
 
@@ -114,8 +127,33 @@ export function validateName(name: unknown): string {
 export const canUse = (u: User | undefined | null): boolean => !!u && u.status === 'active' && !u.restricted;
 
 export function setRestriction(id: number, restricted: boolean, reason = ''): void {
-  run('UPDATE users SET restricted = ?, restricted_reason = ? WHERE id = ?', restricted ? 1 : 0, restricted ? reason : '', id);
+  // a new restriction starts without an appeal; lifting one closes any appeal
+  run(
+    "UPDATE users SET restricted = ?, restricted_reason = ?, appeal_status = '', appeal_text = '', appeal_at = NULL, appeal_reply = '' WHERE id = ?",
+    restricted ? 1 : 0,
+    restricted ? reason : '',
+    id,
+  );
 }
+
+export function submitAppeal(id: number, textInput: unknown): void {
+  const text = typeof textInput === 'string' ? textInput.trim() : '';
+  if (text.length < 5) throw new HttpError(400, 'Please explain why the restriction should be lifted (at least a few words)');
+  if (text.length > 1000) throw new HttpError(400, 'The appeal is too long (1000 characters at most)');
+  const u = getUser(id);
+  if (!u?.restricted) throw new HttpError(400, 'Your account is not restricted');
+  if (u.appealStatus === 'pending') throw new HttpError(409, 'Your appeal is already waiting for the administrator');
+  run("UPDATE users SET appeal_status = 'pending', appeal_text = ?, appeal_at = ?, appeal_reply = '' WHERE id = ?", text, Date.now(), id);
+}
+
+export function denyAppeal(id: number, replyInput: unknown): void {
+  const u = getUser(id);
+  if (!u || u.appealStatus !== 'pending') throw new HttpError(400, 'There is no pending appeal');
+  const reply = typeof replyInput === 'string' ? replyInput.trim().slice(0, 500) : '';
+  run("UPDATE users SET appeal_status = 'denied', appeal_reply = ? WHERE id = ?", reply, id);
+}
+
+export const countPendingAppeals = (): number => get<{ n: number }>("SELECT COUNT(*) AS n FROM users WHERE appeal_status = 'pending'")?.n ?? 0;
 
 /** A user changes their own name (it is also the name they sign in with). */
 export function renameUser(id: number, nameInput: unknown): User {

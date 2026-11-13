@@ -130,6 +130,17 @@ if (version < 4) {
   `);
 }
 
+if (version < 5) {
+  // A restricted user can appeal; the admin answers by lifting the restriction or denying (with a reply).
+  db.exec(`
+    ALTER TABLE users ADD COLUMN appeal_text TEXT NOT NULL DEFAULT '';
+    ALTER TABLE users ADD COLUMN appeal_at INTEGER;
+    ALTER TABLE users ADD COLUMN appeal_status TEXT NOT NULL DEFAULT '';
+    ALTER TABLE users ADD COLUMN appeal_reply TEXT NOT NULL DEFAULT '';
+    PRAGMA user_version = 5;
+  `);
+}
+
 export function all<T>(sql: string, ...params: SQLInputValue[]): T[] {
   return db.prepare(sql).all(...params) as T[];
 }
