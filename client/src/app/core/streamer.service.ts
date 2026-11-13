@@ -621,7 +621,8 @@ export class StreamerService {
 
   private startStats() {
     this.nudges = 0;
-    this.lastNudgeAt = performance.now();
+    this.startedAt = performance.now();
+    this.lastNudgeAt = this.startedAt - 1500; // first check shortly after the first stats
     this.lastBytes = 0;
     this.lastStatsAt = 0;
     this.statsTimer = setInterval(() => void this.collectStats(), 1000);
@@ -682,11 +683,14 @@ export class StreamerService {
    * e.g. when the bitrate is changed). If the picture stays well below what was asked for and the CPU is not
    * the reason, write the parameters again, a few times at most.
    */
+  private startedAt = 0;
   private restoreResolutionIfStuck(actualHeight: number, limitReason: string | undefined): void {
     const expected = this.expectedHeight();
     const now = performance.now();
-    if (!expected || !actualHeight || this.nudges >= 6 || now - this.lastNudgeAt < 3000) return;
-    if (actualHeight >= expected * 0.85 || limitReason === 'cpu') return;
+    if (!expected || !actualHeight || this.nudges >= 10 || now - this.lastNudgeAt < 2000) return;
+    // right after start Chrome may report 'cpu' while it is only ramping up, so only trust it later
+    const early = now - this.startedAt < 15000;
+    if (actualHeight >= expected * 0.85 || (limitReason === 'cpu' && !early)) return;
     this.nudges++;
     this.lastNudgeAt = now;
     void this.nudgeEncoder();
@@ -710,7 +714,8 @@ export class StreamerService {
         await sender.setParameters(params);
       };
       // An identical write can be ignored, so go slightly lower first and then to the real value.
-      await write(0.97);
+      await write(0.9);
+      await new Promise((r) => setTimeout(r, 600)); // let the encoder act on the lower value first
       await write(1);
     } catch (e) {
       console.warn('Could not refresh the encoder', e);
