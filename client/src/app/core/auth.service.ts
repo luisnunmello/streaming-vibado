@@ -30,8 +30,8 @@ export class AuthService {
     }
   }
 
-  async login(name: string, password: string): Promise<void> {
-    const { token } = await this.api.post<{ token: string }>('/api/login', { name, password });
+  async login(name: string, password: string, remember = false): Promise<void> {
+    const { token } = await this.api.post<{ token: string }>('/api/login', { name, password, remember });
     this.api.setToken(token);
     await this.refresh();
   }

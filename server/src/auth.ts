@@ -1,6 +1,11 @@
 import crypto from 'node:crypto';
+import { get, run } from './db.js';
 
 const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
+const REMEMBER_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+const hashToken = (token: string): string => crypto.createHash('sha256').update(token).digest('hex');
+
+run('DELETE FROM sessions WHERE expires_at < ?', Date.now());
 
 export interface Principal {
   role: 'admin' | 'user';
@@ -21,24 +26,40 @@ export function onRevoke(cb: (tokens: string[]) => void): void {
   revokeListeners.push(cb);
 }
 
-export function createSession(principal: Principal): string {
+/** `remember` keeps the session for 30 days and across server restarts (e.g. a redeploy). */
+export function createSession(principal: Principal, remember = false): string {
   const token = crypto.randomBytes(32).toString('base64url');
-  sessions.set(token, { principal, expires: Date.now() + SESSION_TTL_MS });
+  const expires = Date.now() + (remember ? REMEMBER_TTL_MS : SESSION_TTL_MS);
+  sessions.set(token, { principal, expires });
+  if (remember) {
+    run('INSERT INTO sessions (token_hash, role, user_id, expires_at) VALUES (?, ?, ?, ?)', hashToken(token), principal.role, principal.userId ?? null, expires);
+  }
   return token;
 }
 
 export function getSession(token: unknown): Principal | null {
   if (typeof token !== 'string') return null;
-  const s = sessions.get(token);
-  if (!s) return null;
+  let s = sessions.get(token);
+  if (!s) {
+    // a remembered session from before a restart
+    const row = get<{ role: 'admin' | 'user'; user_id: number | null; expires_at: number }>(
+      'SELECT role, user_id, expires_at FROM sessions WHERE token_hash = ?',
+      hashToken(token),
+    );
+    if (!row) return null;
+    s = { principal: row.role === 'admin' ? { role: 'admin' } : { role: 'user', userId: row.user_id ?? undefined }, expires: row.expires_at };
+    sessions.set(token, s);
+  }
   if (s.expires < Date.now()) {
     sessions.delete(token);
+    run('DELETE FROM sessions WHERE token_hash = ?', hashToken(token));
     return null;
   }
   return s.principal;
 }
 
 export function destroySession(token: string): void {
+  run('DELETE FROM sessions WHERE token_hash = ?', hashToken(token));
   if (sessions.delete(token)) revokeListeners.forEach((cb) => cb([token]));
 }
 
@@ -55,11 +76,16 @@ function revokeWhere(pred: (p: Principal, token: string) => boolean): string[] {
 }
 
 /** Ends every admin session except `keep` (used when the master password changes). */
-export const revokeAdminSessions = (keep?: string) => revokeWhere((p, t) => p.role === 'admin' && t !== keep);
+export const revokeAdminSessions = (keep?: string) => {
+  run("DELETE FROM sessions WHERE role = 'admin' AND token_hash <> ?", keep ? hashToken(keep) : '');
+  return revokeWhere((p, t) => p.role === 'admin' && t !== keep);
+};
 
 /** Ends every session of a user, optionally keeping one. */
-export const revokeUserSessions = (userId: number, keep?: string) =>
-  revokeWhere((p, t) => p.role === 'user' && p.userId === userId && t !== keep);
+export const revokeUserSessions = (userId: number, keep?: string) => {
+  run("DELETE FROM sessions WHERE role = 'user' AND user_id = ? AND token_hash <> ?", userId, keep ? hashToken(keep) : '');
+  return revokeWhere((p, t) => p.role === 'user' && p.userId === userId && t !== keep);
+};
 
 // --- throttling: 5 failures per key (IP) -> locked for 1 minute, doubling on repeats (max 15 min) ---
 const failures = new Map<string, { count: number; lockedUntil: number; lockMs: number }>();

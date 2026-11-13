@@ -21,6 +21,7 @@ import { Topbar } from '../shared/topbar';
           <label for="pw">Password</label>
           <input id="pw" type="password" name="pw" [(ngModel)]="password" autocomplete="current-password" required />
         </div>
+        <label class="check remember"><input type="checkbox" name="remember" [(ngModel)]="remember" /> Remember me (stay signed in for 30 days)</label>
         <button class="btn primary wide" type="submit" [disabled]="busy() || !name || !password">Sign in</button>
         @if (error()) {
           <p class="error">{{ error() }}</p>
@@ -65,6 +66,7 @@ export class Login {
 
   protected name = '';
   protected password = '';
+  protected remember = false;
   protected readonly busy = signal(false);
   protected readonly error = signal<string | null>(null);
 
@@ -72,7 +74,7 @@ export class Login {
     this.busy.set(true);
     this.error.set(null);
     try {
-      await this.auth.login(this.name.trim(), this.password);
+      await this.auth.login(this.name.trim(), this.password, this.remember);
       const next = this.route.snapshot.queryParamMap.get('next');
       await this.router.navigateByUrl(next && next.startsWith('/') ? next : '/dashboard');
     } catch (e: any) {

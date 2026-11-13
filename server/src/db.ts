@@ -108,6 +108,19 @@ if (version < 2) {
   }
 }
 
+if (version < 3) {
+  // "Remember me" sessions survive restarts; only a hash of the token is stored.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS sessions (
+      token_hash TEXT PRIMARY KEY,
+      role TEXT NOT NULL,
+      user_id INTEGER,
+      expires_at INTEGER NOT NULL
+    );
+    PRAGMA user_version = 3;
+  `);
+}
+
 export function all<T>(sql: string, ...params: SQLInputValue[]): T[] {
   return db.prepare(sql).all(...params) as T[];
 }

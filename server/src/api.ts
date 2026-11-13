@@ -202,7 +202,7 @@ export function buildApi(live: LiveService, budget: BudgetManager): Router {
       }
       done(!!principal);
       if (!principal) throw new HttpError(401, 'Wrong name or password');
-      res.json({ token: createSession(principal), role: principal.role });
+      res.json({ token: createSession(principal, req.body?.remember === true), role: principal.role });
     }),
   );
 
