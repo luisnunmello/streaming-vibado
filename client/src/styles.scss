@@ -123,6 +123,7 @@ a {
 
 input[type='text'],
 input[type='password'],
+input[type='number'],
 select {
   width: 100%;
   padding: 0.55rem 0.7rem;
@@ -301,21 +302,51 @@ table.list {
   font-size: 0.9rem;
 }
 
-input[type='number'] {
-  width: 100%;
-  padding: 0.5rem 0.6rem;
-  border-radius: 8px;
-  border: 1px solid var(--line);
-  background: var(--bg);
-  color: var(--text);
-  font: inherit;
-}
-
+/* Fields in a grid share their label / input / hint rows (subgrid), so inputs line up even when a label wraps. */
 .cols {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 0.8rem 1rem;
+  gap: 0 1rem;
   align-items: start;
+
+  > .field {
+    display: grid;
+    grid-row: span 3;
+    grid-template-rows: subgrid;
+    gap: 0.35rem;
+    margin-bottom: 0.9rem;
+  }
+  > .check {
+    grid-row: span 3;
+    align-self: end;
+    margin-bottom: 1.1rem;
+  }
+}
+
+/* A row of fields lines up on the inputs (bottom edge), whatever the label height. */
+.row:has(> .field),
+.row:has(> .check) {
+  align-items: flex-end;
+}
+.row > .field {
+  margin-bottom: 0;
+}
+
+/* Page title with its action buttons. */
+.head {
+  margin-bottom: 1.2rem;
+  > h1.page-title,
+  > .page-title {
+    margin: 0;
+  }
+}
+
+/* Buttons in a table cell: spaced, aligned to the right. */
+.cell-actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 0.4rem;
 }
 
 .check {

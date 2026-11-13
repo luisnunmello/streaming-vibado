@@ -24,8 +24,9 @@ const CUSTOM = 'custom';
   selector: 'app-users',
   imports: [FormsModule, LimitsEditor, Modal, RouterLink, TPipe],
   template: `
-    <div class="head">
+    <div class="head row">
       <h1 class="page-title">{{ 'Users' | t }}</h1>
+      <span class="spacer"></span>
       <button type="button" class="btn primary" (click)="openNew()">{{ 'New user' | t }}</button>
     </div>
 
@@ -315,13 +316,6 @@ const CUSTOM = 'custom';
       .field {
         width: 100%;
       }
-    }
-    .head {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 1rem;
-      flex-wrap: wrap;
     }
     .chips {
       display: flex;

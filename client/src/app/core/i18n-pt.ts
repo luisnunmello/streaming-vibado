@@ -1,6 +1,8 @@
 /** Portuguese (Brazil) translations; the key is the English text. Missing keys simply show in English. */
 export const PT: Record<string, string> = {
   // ---- general
+  'You have reached your room limit.': 'Você atingiu o seu limite de salas.',
+  'Your room is named after you:': 'Sua sala tem o seu nome:',
   'Watch': 'Assistir',
   ' (default)': ' (padrão)',
   'user': 'usuário',

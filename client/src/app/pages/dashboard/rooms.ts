@@ -7,47 +7,60 @@ import { AuthService } from '../../core/auth.service';
 import type { RoomView } from '../../core/models';
 import { I18nService, TPipe } from '../../core/i18n.service';
 import { ShareService } from '../../core/share.service';
+import { Modal } from '../../shared/modal';
 import { PublicRooms } from '../../shared/public-rooms';
 import { absoluteUrl, copyText } from '../../core/util';
 
 @Component({
   selector: 'app-rooms',
-  imports: [FormsModule, RouterLink, TPipe, PublicRooms],
+  imports: [FormsModule, RouterLink, TPipe, PublicRooms, Modal],
   template: `
     @if (!auth.me()) {
       <h1 class="page-title">{{ 'Public rooms' | t }}</h1>
       <app-public-rooms />
     } @else {
-    <div class="head">
+    <div class="head row">
       <h1 class="page-title">{{ 'Rooms' | t }}</h1>
+      <span class="spacer"></span>
+      @if (!(singleRoom() && ownCount() >= 1)) {
+        <button type="button" class="btn" [disabled]="full()" [title]="full() ? ('You have reached your room limit.' | t) : ''" (click)="openNew()">{{ 'New room' | t }}</button>
+      }
       <button type="button" class="btn primary" [disabled]="sharing()" (click)="share()">{{ 'Share screen' | t }}</button>
     </div>
 
-    <div class="card create">
-      <h2>{{ 'New room' | t }}</h2>
-      @if (singleRoom() && ownCount() >= 1) {
-        <p class="muted">{{ 'Your account has a single room, named after you. You can change its privacy in the list below.' | t }}</p>
-      } @else {
-      <form class="row" (ngSubmit)="create()">
+    @if (error() && !newOpen()) {
+      <p class="error">{{ error() | t }}</p>
+    }
+
+    <app-modal [open]="newOpen()" [title]="'New room' | t" (closed)="newOpen.set(false)">
+      <form (ngSubmit)="create()">
         @if (!singleRoom()) {
-          <input type="text" name="name" [(ngModel)]="newName" [placeholder]="'Room name' | t" maxlength="40" required />
+          <div class="field">
+            <label for="rname">{{ 'Name' | t }}</label>
+            <input id="rname" type="text" name="name" [(ngModel)]="newName" [placeholder]="'Room name' | t" maxlength="40" required />
+          </div>
         } @else {
-          <b class="autoname">{{ i18n.t("{name}'s room", { name: auth.me()?.name ?? '' }) }}</b>
+          <p class="muted">{{ 'Your room is named after you:' | t }} <b>{{ i18n.t("{name}'s room", { name: auth.me()?.name ?? '' }) }}</b></p>
         }
-        <select name="vis" [(ngModel)]="newVisibility">
-          <option value="public" [disabled]="!canPublic()">{{ 'Public (listed in the lobby)' | t }}</option>
-          <option value="private">{{ 'Private (secret link)' | t }}</option>
-        </select>
-        <button class="btn primary" type="submit" [disabled]="busy() || (!singleRoom() && !newName.trim()) || full()">{{ 'Create room' | t }}</button>
+        <div class="field">
+          <label for="rvis">{{ 'Access' | t }}</label>
+          <select id="rvis" name="vis" [(ngModel)]="newVisibility">
+            <option value="public" [disabled]="!canPublic()">{{ 'Public (listed in the lobby)' | t }}</option>
+            <option value="private">{{ 'Private (secret link)' | t }}</option>
+          </select>
+        </div>
+        @if (auth.me()?.limits; as l) {
+          <p class="muted hint">{{ 'You are using {n} of {max} rooms.' | t: { n: ownCount(), max: l.maxRooms } }}</p>
+        }
+        @if (error()) {
+          <p class="error">{{ error() | t }}</p>
+        }
+        <div class="modal-actions">
+          <button class="btn" type="button" (click)="newOpen.set(false)">{{ 'Cancel' | t }}</button>
+          <button class="btn primary" type="submit" [disabled]="busy() || (!singleRoom() && !newName.trim()) || full()">{{ 'Create room' | t }}</button>
+        </div>
       </form>
-      }
-      @if (auth.me()?.limits; as l) {
-        <p class="muted hint">{{ 'You are using {n} of {max} rooms.' | t: { n: ownCount(), max: l.maxRooms } }}</p>
-      }
-      @if (error()) {
-        <p class="error">{{ error() | t }}</p>
-      }
-    </div>
+    </app-modal>
 
     <div class="card">
       <div class="table-wrap">
@@ -136,16 +149,11 @@ import { absoluteUrl, copyText } from '../../core/util';
     }
   `,
   styles: `
-    .head {
+    .modal-actions {
       display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 1rem;
-      flex-wrap: wrap;
-    }
-    .autoname {
-      flex: 1;
-      align-self: center;
+      justify-content: flex-end;
+      gap: 0.5rem;
+      margin-top: 1rem;
     }
     .create {
       margin-bottom: 1rem;
@@ -259,6 +267,7 @@ export class Rooms implements OnInit, OnDestroy {
   protected readonly i18n = inject(I18nService);
   private readonly shareSvc = inject(ShareService);
   protected readonly sharing = signal(false);
+  protected readonly newOpen = signal(false);
   /** A user who may have only one room gets it named after them; only its privacy is configurable. */
   protected readonly singleRoom = computed(() => this.auth.me()?.role === 'user' && this.auth.me()?.limits?.maxRooms === 1);
   protected readonly full = computed(() => {
@@ -318,11 +327,18 @@ export class Rooms implements OnInit, OnDestroy {
     }
   }
 
+  protected openNew(): void {
+    this.error.set(null);
+    this.newName = '';
+    this.newOpen.set(true);
+  }
+
   protected async create(): Promise<void> {
     this.busy.set(true);
     await this.act(async () => {
       await this.api.post('/api/rooms', { name: this.singleRoom() ? '' : this.newName, visibility: this.newVisibility });
       this.newName = '';
+      this.newOpen.set(false);
     });
     this.busy.set(false);
   }

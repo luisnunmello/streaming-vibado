@@ -11,8 +11,9 @@ import { Modal } from '../../shared/modal';
   selector: 'app-presets',
   imports: [FormsModule, LimitsEditor, Modal, TPipe],
   template: `
-    <div class="head">
+    <div class="head row">
       <h1 class="page-title">{{ 'Limit presets' | t }}</h1>
+      <span class="spacer"></span>
       <button type="button" class="btn primary" (click)="openCreate()">{{ 'New preset' | t }}</button>
     </div>
     <p class="intro muted">
@@ -64,8 +65,10 @@ import { Modal } from '../../shared/modal';
                 <td class="muted summary">{{ describe(p.limits) }}</td>
                 <td>{{ p.userCount }}</td>
                 <td class="right">
-                  <button type="button" class="btn small" (click)="openCreate(p)">{{ 'Clone' | t }}</button>
-                  <button type="button" class="btn small" (click)="toggleEdit(p)">{{ (editing()?.id === p.id ? 'Close' : 'Edit') | t }}</button>
+                  <div class="cell-actions">
+                    <button type="button" class="btn small" (click)="openCreate(p)">{{ 'Clone' | t }}</button>
+                    <button type="button" class="btn small" (click)="toggleEdit(p)">{{ (editing()?.id === p.id ? 'Close' : 'Edit') | t }}</button>
+                  </div>
                 </td>
               </tr>
               @if (editing(); as e) {
@@ -107,13 +110,6 @@ import { Modal } from '../../shared/modal';
     </div>
   `,
   styles: `
-    .head {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 1rem;
-      flex-wrap: wrap;
-    }
     .modal-actions {
       display: flex;
       justify-content: flex-end;
