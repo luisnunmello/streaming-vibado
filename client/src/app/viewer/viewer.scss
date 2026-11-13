@@ -187,7 +187,7 @@ video {
 
 .stats {
   position: absolute;
-  top: 0.75rem;
+  bottom: 4.5rem; // above the control bar, clear of the room name / Lobbies row at the top
   left: 0.75rem;
   padding: 0.35rem 0.6rem;
   border-radius: 6px;
