@@ -15,7 +15,7 @@ streamer browser ──WebRTC──▶ mediasoup (server) ──WebRTC──▶ 
 
 | Address | Who | What |
 |---|---|---|
-| `/` | everyone | Home: links to the main stream, public rooms, sign-in and key activation |
+| `/` | everyone | Goes to `/dashboard/rooms` (visitors are asked to sign in first) |
 | `/lobbies` | everyone | Public rooms, live ones first |
 | `/r/<room>` | everyone | Watch a room. Private rooms need their secret link (`/r/<room>?key=…`) |
 | `/r/main` | everyone | The admin's permanent room |
