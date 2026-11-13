@@ -31,6 +31,7 @@ import {
   lockedFor,
   recordAttempt,
   revokeAdminSessions,
+  revokeGuestSessions,
   revokeUserSessions,
   type Principal,
 } from './auth.js';
@@ -39,6 +40,7 @@ import { HttpError } from './errors.js';
 import { getGlobals, updateGlobals } from './globals.js';
 import { createPreset, deletePreset, listPresets, updatePreset } from './presets.js';
 import type { LiveService } from './live.js';
+import { ADMIN_MAX_INVITE_MINUTES, activeInvite, createInvite, getInvite, listInvites, peekInvite, redeemInvite, revokeInvite, statusOf as inviteStatus, type Invite } from './invites.js';
 import { notifyAdmin } from './notify.js';
 import { checkNewPassword } from './password.js';
 import { autoRoomName, countRooms, createRoom, deleteRoom, getRoomById, getRoomBySlug, listPublicRooms, listRooms, updateRoom, type Room } from './rooms.js';
@@ -70,6 +72,8 @@ const tokenOf = (res: Response): string => res.locals['token'];
 
 /** What a restricted user may still do: see who they are (and why), change their login, sign out. */
 const RESTRICTED_OK = new Set(['/me', '/me/name', '/me/password', '/me/appeal', '/logout']);
+/** What someone using a temporary invite may call: see themselves and their room, and leave. */
+const GUEST_OK = new Set(['/me', '/logout', '/rooms', '/me/invite/leave']);
 
 function requireAuth(req: Request, res: Response, next: NextFunction): void {
   const token = bearer(req);
@@ -77,6 +81,16 @@ function requireAuth(req: Request, res: Response, next: NextFunction): void {
   if (!principal) {
     res.status(401).json({ error: 'Unauthorized' });
     return;
+  }
+  if (principal.role === 'guest') {
+    if (!activeInvite(principal.inviteId)) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+    if (!GUEST_OK.has(req.path) || (req.path === '/rooms' && req.method !== 'GET')) {
+      res.status(403).json({ error: 'Not allowed' });
+      return;
+    }
   }
   if (principal.role === 'user' && !RESTRICTED_OK.has(req.path)) {
     const u = getUser(principal.userId!);
@@ -281,6 +295,19 @@ export function buildApi(live: LiveService, budget: BudgetManager): Router {
         res.json({ role: 'admin', name: 'admin', limits: null, pendingAppeals: countPendingAppeals() });
         return;
       }
+      if (p.role === 'guest') {
+        const inv = activeInvite(p.inviteId);
+        const room = inv && getRoomById(inv.roomId);
+        if (!inv || !room) throw new HttpError(401, 'Unauthorized');
+        const creator = inv.creatorId === null ? undefined : getUser(inv.creatorId);
+        res.json({
+          role: 'guest',
+          name: userName(inv.creatorId),
+          limits: creator?.limits ?? null,
+          guest: { inviteId: inv.id, endsAt: inv.endsAt, creatorName: userName(inv.creatorId), room: roomView(room) },
+        });
+        return;
+      }
       const g = getUser(p.userId!);
       if (!g || g.status !== 'active') throw new HttpError(401, 'Unauthorized');
       res.json({
@@ -386,6 +413,11 @@ ${String(req.body?.text ?? '').trim().slice(0, 600)}`);
     requireAuth,
     wrap((_req, res) => {
       const p = principalOf(res);
+      if (p.role === 'guest') {
+        const room = getRoomById(activeInvite(p.inviteId)?.roomId ?? '');
+        res.json({ rooms: room ? [roomView(room)] : [] });
+        return;
+      }
       res.json({ rooms: (p.role === 'admin' ? listRooms() : listRooms(p.userId!)).map(roomView) });
     }),
   );
@@ -451,6 +483,114 @@ ${String(req.body?.text ?? '').trim().slice(0, 600)}`);
       const room = manageable(res, String(req.params['id']));
       const rt = live.runtimes.get(room.id);
       if (rt && live.isLive(rt)) live.endStream(rt, principalOf(res).role === 'admin' && room.ownerId !== null ? 'The admin stopped this stream' : 'Stream stopped');
+      res.json({ ok: true });
+    }),
+  );
+
+  // ---------------------------------------------------------------- temporary invites
+
+  const inviteView = (i: Invite) => {
+    const room = getRoomById(i.roomId);
+    return {
+      id: i.id,
+      roomId: i.roomId,
+      roomSlug: room?.slug ?? '',
+      roomName: room ? room.name : '',
+      autoName: !!room && room.ownerId !== null && room.name === autoRoomName(userName(room.ownerId)),
+      ownerName: room ? userName(room.ownerId) : '',
+      minutes: i.minutes,
+      status: inviteStatus(i),
+      createdAt: i.createdAt,
+      linkExpiresAt: i.linkExpiresAt,
+      redeemedAt: i.redeemedAt,
+      endsAt: i.endsAt,
+      revokedBy: i.revokedBy,
+    };
+  };
+
+  /** The longest temporary invite the caller may create (0 = none). */
+  const inviteCap = (p: Principal): number => {
+    if (p.role === 'admin') return ADMIN_MAX_INVITE_MINUTES;
+    if (p.role === 'user') return getUser(p.userId!)?.limits.maxTempInviteMinutes ?? 0;
+    return 0;
+  };
+
+  api.get(
+    '/invites/check',
+    wrap((req, res) => {
+      const inv = peekInvite(req.query['key']);
+      const room = inv && getRoomById(inv.roomId);
+      if (!inv || !room) throw new HttpError(404, 'This invite is invalid, expired or already used');
+      const creator = userName(inv.creatorId);
+      res.json({ creatorName: creator, roomName: room.name, autoName: room.name === autoRoomName(creator), minutes: inv.minutes });
+    }),
+  );
+
+  api.post(
+    '/invites/redeem',
+    wrap((req, res) => {
+      const done = throttle(req, 'invite');
+      try {
+        const inv = redeemInvite(req.body?.key);
+        done(true);
+        res.json({ token: createSession({ role: 'guest', inviteId: inv.id }, true, inv.minutes * 60_000), role: 'guest' });
+      } catch (e) {
+        done(false);
+        throw e;
+      }
+    }),
+  );
+
+  api.get(
+    '/me/invites',
+    requireAuth,
+    wrap((_req, res) => {
+      const p = principalOf(res);
+      if (p.role === 'guest') throw new HttpError(403, 'Not allowed');
+      res.json({ cap: inviteCap(p), invites: listInvites(p.role === 'admin' ? null : p.userId!).map(inviteView) });
+    }),
+  );
+
+  api.post(
+    '/me/invites',
+    requireAuth,
+    wrap((req, res) => {
+      const p = principalOf(res);
+      const cap = inviteCap(p);
+      if (cap <= 0) throw new HttpError(403, 'Temporary invites are not allowed for your account');
+      const minutes = Math.floor(Number(req.body?.minutes));
+      if (!Number.isFinite(minutes) || minutes < 1 || minutes > cap) throw new HttpError(400, `The invite must last between 1 and ${cap} minutes`);
+      const room = getRoomById(String(req.body?.roomId ?? ''));
+      const mine = !!room && (p.role === 'admin' ? room.ownerId === null : room.ownerId === p.userId);
+      if (!room || !mine) throw new HttpError(404, 'Room not found');
+      const { invite, token } = createInvite(p.role === 'admin' ? null : p.userId!, room.id, minutes);
+      res.status(201).json({ invite: inviteView(invite), link: `/invite?key=${token}` });
+    }),
+  );
+
+  api.delete(
+    '/me/invites/:id',
+    requireAuth,
+    wrap((req, res) => {
+      const p = principalOf(res);
+      if (p.role === 'guest') throw new HttpError(403, 'Not allowed');
+      const inv = getInvite(idParam(req));
+      if (!inv || (p.role !== 'admin' && inv.creatorId !== p.userId)) throw new HttpError(404, 'Invite not found');
+      revokeInvite(inv.id, p.role === 'admin' && inv.creatorId !== null ? 'admin' : 'creator');
+      revokeGuestSessions(inv.id); // the guest is disconnected and their stream stops
+      res.json({ invite: inviteView(getInvite(inv.id)!) });
+    }),
+  );
+
+  /** The guest gives the invite back. */
+  api.post(
+    '/me/invite/leave',
+    requireAuth,
+    wrap((_req, res) => {
+      const p = principalOf(res);
+      if (p.role !== 'guest' || p.inviteId === undefined) throw new HttpError(403, 'Not allowed');
+      revokeInvite(p.inviteId, 'guest');
+      revokeGuestSessions(p.inviteId);
       res.json({ ok: true });
     }),
   );

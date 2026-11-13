@@ -662,3 +662,63 @@ describe('one-room users', () => {
     assert.equal(rooms[0].name, "solo2's room");
   });
 });
+
+describe('temporary invites', () => {
+  it('lends a room and its limits to someone without an account, until revoked or out of time', async () => {
+    const admin = await login('admin', 'new-master-pass-1');
+    const mk = async (name, limits) => {
+      const r = await api('POST', '/api/admin/users', { token: admin, body: { name, limits } });
+      const a = await api('POST', '/api/activate', { body: { key: r.key, password: name + '-password-1' } });
+      return { id: r.user.id, token: a.token };
+    };
+    const nope = await mk('tinv0', { maxTempInviteMinutes: 0 });
+    const host = await mk('tinv1', { maxTempInviteMinutes: 30, maxBitrateMbps: 2 });
+    const room = (await api('POST', '/api/rooms', { token: host.token, body: { name: 'Lent room', visibility: 'private' } })).room;
+    assert.equal((await api('POST', '/api/me/invites', { token: nope.token, body: { roomId: room.id, minutes: 5 } })).status, 403, 'not allowed with a 0 limit');
+    assert.equal((await api('POST', '/api/me/invites', { token: host.token, body: { roomId: room.id, minutes: 31 } })).status, 400, 'above the time limit');
+    const made = await api('POST', '/api/me/invites', { token: host.token, body: { roomId: room.id, minutes: 10 } });
+    assert.equal(made.status, 201);
+    const key = made.link.split('key=')[1];
+
+    const peek = await api('GET', `/api/invites/check?key=${key}`);
+    assert.deepEqual([peek.creatorName, peek.minutes], ['tinv1', 10]);
+    const red = await api('POST', '/api/invites/redeem', { body: { key } });
+    assert.equal(red.status, 200);
+    assert.equal((await api('POST', '/api/invites/redeem', { body: { key } })).status, 404, 'single use');
+
+    const guest = red.token;
+    const me = await api('GET', '/api/me', { token: guest });
+    assert.equal(me.role, 'guest');
+    assert.equal(me.limits.maxBitrateMbps, 2, 'uses the inviter limits');
+    assert.equal((await api('GET', '/api/rooms', { token: guest })).rooms.length, 1);
+    assert.equal((await api('POST', '/api/rooms', { token: guest, body: { name: 'x', visibility: 'public' } })).status, 403);
+    assert.equal((await api('GET', '/api/admin/users', { token: guest })).status, 403);
+
+    const g = await join(room.slug, { token: guest });
+    assert.equal(g.reply.role, 'owner', 'the guest streams in the invited room');
+    assert.equal(g.reply.limits.maxBitrateMbps, 2);
+    let revoked = false;
+    g.socket.on('sessionRevoked', () => (revoked = true));
+
+    const other = await mk('tinv2', {});
+    const sneak = await join(room.slug, { token: other.token });
+    assert.notEqual(sneak.reply.role, 'owner', 'other people cannot use the room');
+    sneak.socket.close();
+
+    const list = await api('GET', '/api/me/invites', { token: host.token });
+    assert.equal(list.invites[0].status, 'active');
+    assert.equal((await api('DELETE', `/api/me/invites/${made.invite.id}`, { token: other.token })).status, 404, 'only the creator revokes');
+    assert.equal((await api('DELETE', `/api/me/invites/${made.invite.id}`, { token: host.token })).status, 200);
+    await new Promise((r) => setTimeout(r, 200));
+    assert.equal(revoked, true, 'the guest is disconnected');
+    assert.equal((await api('GET', '/api/me', { token: guest })).status, 401);
+    g.socket.close();
+
+    // the guest can also give the invite back
+    const made2 = await api('POST', '/api/me/invites', { token: host.token, body: { roomId: room.id, minutes: 5 } });
+    const guest2 = (await api('POST', '/api/invites/redeem', { body: { key: made2.link.split('key=')[1] } })).token;
+    assert.equal((await api('POST', '/api/me/invite/leave', { token: guest2 })).status, 200);
+    assert.equal((await api('GET', '/api/me', { token: guest2 })).status, 401);
+    assert.equal((await api('GET', '/api/me/invites', { token: host.token })).invites[0].status, 'revoked');
+  });
+});

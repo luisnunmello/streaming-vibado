@@ -8,9 +8,12 @@ const hashToken = (token: string): string => crypto.createHash('sha256').update(
 run('DELETE FROM sessions WHERE expires_at < ?', Date.now());
 
 export interface Principal {
-  role: 'admin' | 'user';
+  /** 'guest' = someone using a temporary invite: no account, only the invited room. */
+  role: 'admin' | 'user' | 'guest';
   /** Set for users. */
   userId?: number;
+  /** Set for guests. */
+  inviteId?: number;
 }
 
 interface Session {
@@ -32,7 +35,7 @@ export function createSession(principal: Principal, remember = false, ttlMs?: nu
   const expires = Date.now() + (ttlMs ?? (remember ? REMEMBER_TTL_MS : SESSION_TTL_MS));
   sessions.set(token, { principal, expires });
   if (remember) {
-    run('INSERT INTO sessions (token_hash, role, user_id, expires_at) VALUES (?, ?, ?, ?)', hashToken(token), principal.role, principal.userId ?? null, expires);
+    run('INSERT INTO sessions (token_hash, role, user_id, expires_at) VALUES (?, ?, ?, ?)', hashToken(token), principal.role, principal.userId ?? principal.inviteId ?? null, expires);
   }
   return token;
 }
@@ -42,12 +45,14 @@ export function getSession(token: unknown): Principal | null {
   let s = sessions.get(token);
   if (!s) {
     // a remembered session from before a restart
-    const row = get<{ role: 'admin' | 'user'; user_id: number | null; expires_at: number }>(
+    const row = get<{ role: 'admin' | 'user' | 'guest'; user_id: number | null; expires_at: number }>(
       'SELECT role, user_id, expires_at FROM sessions WHERE token_hash = ?',
       hashToken(token),
     );
     if (!row) return null;
-    s = { principal: row.role === 'admin' ? { role: 'admin' } : { role: 'user', userId: row.user_id ?? undefined }, expires: row.expires_at };
+    const principal: Principal =
+      row.role === 'admin' ? { role: 'admin' } : row.role === 'guest' ? { role: 'guest', inviteId: row.user_id ?? undefined } : { role: 'user', userId: row.user_id ?? undefined };
+    s = { principal, expires: row.expires_at };
     sessions.set(token, s);
   }
   if (s.expires < Date.now()) {
@@ -74,6 +79,12 @@ function revokeWhere(pred: (p: Principal, token: string) => boolean): string[] {
   if (revoked.length) revokeListeners.forEach((cb) => cb(revoked));
   return revoked;
 }
+
+/** Ends the sessions of whoever redeemed an invite (the invite was revoked or ran out). */
+export const revokeGuestSessions = (inviteId: number) => {
+  run("DELETE FROM sessions WHERE role = 'guest' AND user_id = ?", inviteId);
+  return revokeWhere((p) => p.role === 'guest' && p.inviteId === inviteId);
+};
 
 /** Ends every admin session except `keep` (used when the master password changes). */
 export const revokeAdminSessions = (keep?: string) => {

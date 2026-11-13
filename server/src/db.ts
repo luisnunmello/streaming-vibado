@@ -149,6 +149,26 @@ if (version < 6) {
   `);
 }
 
+if (version < 7) {
+  // Temporary invites: a link that lends one of your rooms (and your limits) to someone without an account.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS invites (
+      id              INTEGER PRIMARY KEY AUTOINCREMENT,
+      token_hash      TEXT NOT NULL UNIQUE,
+      creator_id      INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      room_id         TEXT NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
+      minutes         INTEGER NOT NULL,
+      created_at      INTEGER NOT NULL,
+      link_expires_at INTEGER NOT NULL,
+      redeemed_at     INTEGER,
+      ends_at         INTEGER,
+      revoked_at      INTEGER,
+      revoked_by      TEXT NOT NULL DEFAULT ''
+    );
+    PRAGMA user_version = 7;
+  `);
+}
+
 export function all<T>(sql: string, ...params: SQLInputValue[]): T[] {
   return db.prepare(sql).all(...params) as T[];
 }

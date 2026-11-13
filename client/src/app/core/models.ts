@@ -6,6 +6,7 @@ export interface Limits {
   maxFps: number;
   maxViewersPerRoom: number;
   maxWatching: number;
+  maxTempInviteMinutes: number;
   maxStreamMinutes: number;
   allowPublicRooms: boolean;
   allowAudio: boolean;
@@ -13,7 +14,7 @@ export interface Limits {
 }
 
 export interface Me {
-  role: 'admin' | 'user';
+  role: 'admin' | 'user' | 'guest';
   name: string;
   userId?: number;
   /** null for the admin (no per-account limits). */
@@ -29,6 +30,24 @@ export interface Me {
   appealReply?: string;
   /** Admin only: appeals waiting for an answer. */
   pendingAppeals?: number;
+  /** Someone using a temporary invite. */
+  guest?: { inviteId: number; endsAt: number; creatorName: string; room: RoomView };
+}
+
+export interface InviteView {
+  id: number;
+  roomId: string;
+  roomSlug: string;
+  roomName: string;
+  autoName: boolean;
+  ownerName: string;
+  minutes: number;
+  status: 'waiting' | 'active' | 'ended' | 'revoked' | 'expired';
+  createdAt: number;
+  linkExpiresAt: number;
+  redeemedAt: number | null;
+  endsAt: number | null;
+  revokedBy: string;
 }
 
 export interface RoomView {
@@ -142,6 +161,7 @@ export const LIMIT_FIELDS: { key: keyof Limits; label: string; hint?: string; ty
   { key: 'maxFps', label: 'Max frame rate', type: 'number' },
   { key: 'maxViewersPerRoom', label: 'Max viewers per room', type: 'number' },
   { key: 'maxWatching', label: 'Streams watched at once', type: 'number' },
+  { key: 'maxTempInviteMinutes', label: 'Longest temporary invite (min)', hint: '0 = not allowed', type: 'number' },
   { key: 'maxStreamMinutes', label: 'Max stream length (min)', hint: '0 = unlimited', type: 'number' },
   { key: 'monthlyGb', label: 'Monthly traffic (GB)', hint: '0 = unlimited', type: 'number' },
   { key: 'allowPublicRooms', label: 'May create public rooms', type: 'boolean' },

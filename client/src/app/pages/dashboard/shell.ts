@@ -1,7 +1,8 @@
-import { Component, OnDestroy, OnInit, inject } from '@angular/core';
+import { Component, OnDestroy, OnInit, inject, signal } from '@angular/core';
 import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { Account } from './account';
 import { Appeal } from './appeal';
+import { ApiService } from '../../core/api.service';
 import { AuthService } from '../../core/auth.service';
 import { DialogService } from '../../core/dialog.service';
 import { I18nService, TPipe } from '../../core/i18n.service';
@@ -17,6 +18,9 @@ import { StreamerService } from '../../core/streamer.service';
       <a routerLink="/" class="brand">{{ 'Streaming' | t }}</a>
       <nav>
         <a routerLink="/dashboard/rooms" routerLinkActive="on">{{ 'Rooms' | t }}</a>
+        @if (auth.me()?.role === 'admin' || (auth.me()?.limits?.maxTempInviteMinutes ?? 0) > 0) {
+          <a routerLink="/dashboard/invites" routerLinkActive="on">{{ 'Invites' | t }}</a>
+        }
         @if (auth.isUser() && (auth.me()?.referrals?.quota ?? 0) > 0) {
           <a routerLink="/dashboard/referrals" routerLinkActive="on">{{ 'Referrals' | t }}</a>
         }
@@ -25,7 +29,7 @@ import { StreamerService } from '../../core/streamer.service';
           <a routerLink="/dashboard/presets" routerLinkActive="on">{{ 'Presets' | t }}</a>
           <a routerLink="/dashboard/bandwidth" routerLinkActive="on">{{ 'Bandwidth' | t }}</a>
         }
-        @if (auth.me()) {
+        @if (auth.me() && auth.me()?.role !== 'guest') {
           <a routerLink="/dashboard/account" routerLinkActive="on">{{ 'Account' | t }}</a>
         }
       </nav>
@@ -40,8 +44,13 @@ import { StreamerService } from '../../core/streamer.service';
       }
       <app-lang-switch />
       @if (auth.me()) {
-        <span class="who">{{ auth.me()?.name }} <span class="badge">{{ auth.me()?.role | t }}</span></span>
-        <button type="button" class="btn small" (click)="logout()">{{ 'Sign out' | t }}</button>
+        @if (auth.me()?.guest; as g) {
+          <span class="who">{{ 'Guest of {name}' | t: { name: g.creatorName } }} <span class="badge warn">{{ timeLeft(g.endsAt) }}</span></span>
+          <button type="button" class="btn small" (click)="logout()">{{ 'Leave' | t }}</button>
+        } @else {
+          <span class="who">{{ auth.me()?.name }} <span class="badge">{{ auth.me()?.role | t }}</span></span>
+          <button type="button" class="btn small" (click)="logout()">{{ 'Sign out' | t }}</button>
+        }
       } @else {
         <a routerLink="/activate" class="link">{{ 'Have a key?' | t }}</a>
         <a routerLink="/login" class="btn small primary">{{ 'Sign in' | t }}</a>
@@ -204,10 +213,12 @@ import { StreamerService } from '../../core/streamer.service';
 export class Shell implements OnInit, OnDestroy {
   protected readonly auth = inject(AuthService);
   protected readonly streamer = inject(StreamerService);
+  private readonly api = inject(ApiService);
   private readonly router = inject(Router);
   private timer?: ReturnType<typeof setInterval>;
 
   ngOnInit(): void {
+    this.tickTimer = setInterval(() => this.nowTick.set(Date.now()), 1000);
     // Keeps limits and referral counts current on every page, and notices a session the server ended
     // (account disabled, password changed elsewhere). The studio gets limit changes instantly over its socket.
     this.timer = setInterval(async () => {
@@ -219,6 +230,7 @@ export class Shell implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    clearInterval(this.tickTimer);
     clearInterval(this.timer);
   }
 
@@ -251,7 +263,27 @@ export class Shell implements OnInit, OnDestroy {
     await this.router.navigateByUrl('/dashboard/users');
   }
 
+  /** Remaining time of a guest's invite, as m:ss (ticks every second). */
+  protected timeLeft(endsAt: number): string {
+    const s = Math.max(0, Math.floor((endsAt - this.nowTick()) / 1000));
+    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+  }
+  private readonly nowTick = signal(Date.now());
+  private tickTimer?: ReturnType<typeof setInterval>;
+
   protected async logout(): Promise<void> {
+    if (this.auth.me()?.role === 'guest') {
+      // leaving gives the invite back
+      await this.streamer.leave();
+      try {
+        await this.api.post('/api/me/invite/leave');
+      } catch {
+        /* already over */
+      }
+      this.auth.clear();
+      await this.router.navigateByUrl('/');
+      return;
+    }
     if (this.auth.adminBackup()) return this.returnToAdmin(); // signing out of a borrowed account goes back to admin
     await this.streamer.leave(); // signing out ends any running stream
     await this.auth.logout();

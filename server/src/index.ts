@@ -10,6 +10,8 @@ import { config } from './config.js';
 import { LiveService } from './live.js';
 import { ensureMainRoom, purgePublicRooms } from './rooms.js';
 import { initSettings } from './settings.js';
+import { revokeGuestSessions } from './auth.js';
+import { dueInvites, markEnded } from './invites.js';
 import { startAppealReminders } from './notify.js';
 import { startSfu } from './sfu.js';
 
@@ -40,6 +42,13 @@ const budget = new BudgetManager(live);
 live.budget = budget;
 live.attach();
 budget.start();
+// Temporary invites end by themselves: the guest is disconnected and their stream stops.
+setInterval(() => {
+  for (const inv of dueInvites()) {
+    markEnded(inv.id);
+    revokeGuestSessions(inv.id);
+  }
+}, 15_000).unref();
 startAppealReminders(Number(process.env['APPEAL_REMINDER_HOURS'] ?? 12));
 
 app.use('/api', buildApi(live, budget));

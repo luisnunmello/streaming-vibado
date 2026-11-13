@@ -23,7 +23,7 @@ import { absoluteUrl, copyText } from '../../core/util';
     <div class="head row">
       <h1 class="page-title">{{ 'Rooms' | t }}</h1>
       <span class="spacer"></span>
-      @if (!(singleRoom() && ownCount() >= 1)) {
+      @if (auth.me()?.role !== 'guest' && !(singleRoom() && ownCount() >= 1)) {
         <button type="button" class="btn" [disabled]="full()" [title]="full() ? ('You have reached your room limit.' | t) : ''" (click)="openNew()">{{ 'New room' | t }}</button>
       }
       <button type="button" class="btn primary" [disabled]="sharing()" (click)="share()">{{ 'Share screen' | t }}</button>
@@ -114,6 +114,7 @@ import { absoluteUrl, copyText } from '../../core/util';
                   }
                   <button type="button" class="btn small" (click)="copyLink(r)">{{ (copied() === r.id ? 'Copied!' : 'Copy link') | t }}</button>
                   <a class="btn small" [href]="r.link" target="_blank" rel="noopener">{{ 'Open' | t }}</a>
+                  @if (auth.me()?.role !== 'guest') {
                   <details class="more" (toggle)="placeMenu($event)">
                     <summary class="btn small">{{ 'More' | t }}</summary>
                     <div class="menu">
@@ -136,6 +137,7 @@ import { absoluteUrl, copyText } from '../../core/util';
                       }
                     </div>
                   </details>
+                  }
                 </div>
                 </td>
               </tr>
@@ -292,7 +294,7 @@ export class Rooms implements OnInit, OnDestroy {
   /** The studio is only for rooms you own (the admin owns the main room and their own). */
   protected isMine(r: RoomView): boolean {
     const me = this.auth.me();
-    return !!me && (me.role === 'admin' ? r.ownerId === null : r.ownerId === me.userId);
+    return !!me && (me.role === 'guest' || (me.role === 'admin' ? r.ownerId === null : r.ownerId === me.userId));
   }
 
   protected canPublicFor(_r: RoomView): boolean {

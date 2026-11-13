@@ -7,6 +7,7 @@ import { config } from './config.js';
 import { getSession, onRevoke, type Principal } from './auth.js';
 import { getGlobals } from './globals.js';
 import type { Limits } from './limits.js';
+import { activeInvite } from './invites.js';
 import { autoRoomName, deleteRoom, getRoomById, getRoomBySlug, type Room } from './rooms.js';
 import type { Sfu } from './sfu.js';
 
@@ -235,6 +236,11 @@ export class LiveService {
     }
     // Every page a user has open hears about changes to their limits.
     if (principal?.role === 'user') socket.join(`u:${principal.userId}`);
+    // A guest streams under the limits of whoever invited them, so they hear about those changing too.
+    if (principal?.role === 'guest') {
+      const creator = activeInvite(principal.inviteId)?.creatorId;
+      if (creator) socket.join(`u:${creator}`);
+    }
 
     const on = (event: string, fn: (data: any) => Promise<Record<string, unknown> | void> | Record<string, unknown> | void) => {
       socket.on(event, async (data: any, ack?: Ack) => {
@@ -419,7 +425,13 @@ export class LiveService {
     if (typeof d.slug !== 'string') throw new ClientError('Room not found');
     const room = getRoomBySlug(d.slug);
     const p = peer.principal;
-    const owner = !!room && !!p && ((p.role === 'admin' && room.ownerId === null) || (p.role === 'user' && p.userId === room.ownerId));
+    const guestInvite = p?.role === 'guest' ? activeInvite(p.inviteId) : undefined;
+    const owner =
+      !!room &&
+      !!p &&
+      ((p.role === 'admin' && room.ownerId === null) ||
+        (p.role === 'user' && p.userId === room.ownerId) ||
+        (!!guestInvite && guestInvite.roomId === room.id));
     const ownerUser = room?.ownerId != null ? getUser(room.ownerId) : undefined;
 
     let allowed = !!room && (room.ownerId === null || ownerUser?.status === 'active' && !ownerUser.restricted);
@@ -498,7 +510,7 @@ export class LiveService {
    */
   private enforceWatchLimit(peer: Peer, newRoomId: string): void {
     const p = peer.principal;
-    if (p?.role === 'admin') return;
+    if (p?.role === 'admin' || p?.role === 'guest') return;
     // Signed-in users are counted per account; anonymous viewers can only be told apart by IP address.
     const max = p ? (getUser(p.userId!)?.limits.maxWatching ?? 1) : getGlobals().anonymousMaxWatching;
     if (max <= 0) return;
@@ -534,7 +546,8 @@ export class LiveService {
       peer.socket.leave(`o:${rt.room.id}`);
       if (peer.isOwner && rt.ownerSocketId === peer.socket.id) {
         rt.ownerSocketId = null;
-        this.scheduleOwnerGone(rt.room.id);
+        // a guest leaving does not mean the owner is offline
+        if (peer.principal?.role !== 'guest') this.scheduleOwnerGone(rt.room.id);
       }
       rt.viewerIds.delete(peer.socket.id);
       this.emitViewerCount(rt);

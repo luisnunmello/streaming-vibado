@@ -37,7 +37,8 @@ export class ShareService {
     const me = this.auth.me();
     if (!me) throw new Error('Not signed in');
     const { rooms } = await this.api.get<{ rooms: RoomView[] }>('/api/rooms');
-    const mine = rooms.filter((r) => (me.role === 'admin' ? r.ownerId === null : r.ownerId === me.userId));
+    // a guest only sees the room they were invited to
+    const mine = me.role === 'guest' ? rooms : rooms.filter((r) => (me.role === 'admin' ? r.ownerId === null : r.ownerId === me.userId));
     let target = mine.find((r) => r.slug === this.lastUsed()) ?? mine.find((r) => r.live) ?? mine[0];
     if (!target) {
       // first time: a private room (secret link) that is named after the user
