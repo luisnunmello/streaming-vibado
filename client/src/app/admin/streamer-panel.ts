@@ -1,29 +1,24 @@
-import { Component, ElementRef, OnInit, OnDestroy, computed, effect, inject, signal, untracked, viewChild } from '@angular/core';
+import { Component, ElementRef, OnInit, computed, effect, inject, signal, viewChild } from '@angular/core';
+import { localControls } from '../core/stream-controls';
 import { StreamerService } from '../core/streamer.service';
-import {
-  CODECS,
-  PRESETS,
-  type AudioMode,
-  type Preset,
-  type StreamSettings,
-  clampSettings,
-  fpsOptions,
-  loadSettings,
-  resolutionOptions,
-  saveSettings,
-} from '../core/stream-settings';
+import { CODECS, type AudioMode, type Preset, type StreamSettings, fpsOptions, isPresetActive, resolutionOptions } from '../core/stream-settings';
+import { ControlBar } from '../shared/control-bar';
 
 @Component({
   selector: 'app-streamer-panel',
+  imports: [ControlBar],
   templateUrl: './streamer-panel.html',
   styleUrl: './streamer-panel.scss',
+  host: { '(document:fullscreenchange)': 'onFullscreenChange()' },
 })
-export class StreamerPanel implements OnInit, OnDestroy {
+export class StreamerPanel implements OnInit {
   protected readonly s = inject(StreamerService);
-  protected readonly settings = signal<StreamSettings>(clampSettings(loadSettings({ adaptive: !!this.s.limits(), codec: this.s.limits() ? 'vp8' : 'h264' }), this.s.limits()));
+  /** The settings live in the service, so the preview controls and other tabs change the same thing. */
+  protected readonly settings = this.s.settings;
+  protected readonly local = localControls(this.s);
   protected readonly devices = signal<MediaDeviceInfo[]>([]);
   // Everything below follows the account's limits, which the admin can change while this page is open.
-  protected readonly presets = computed(() => this.distinctPresets());
+  protected readonly presets = this.s.presetChoices;
   protected readonly resolutions = computed(() => resolutionOptions(this.s.limits()));
   protected readonly maxBitrate = computed(() => this.s.limits()?.maxBitrateMbps ?? 40);
   protected readonly codecs = CODECS;
@@ -37,12 +32,13 @@ export class StreamerPanel implements OnInit, OnDestroy {
   protected readonly secure = window.isSecureContext && !!navigator.mediaDevices?.getDisplayMedia;
   protected readonly live = computed(() => this.s.state() === 'live');
   protected readonly busy = computed(() => this.s.state() !== 'idle');
+  protected readonly fullscreen = signal(false);
   protected readonly codecHint = computed(() => CODECS.find((c) => c.value === this.settings().codec)?.hint ?? '');
   protected readonly audioHint = computed(() => this.audioModes.find((m) => m.value === this.settings().audioMode)?.hint ?? '');
   protected readonly egressMbps = computed(() => Math.round(this.s.viewers() * this.settings().bitrateMbps * 10) / 10);
 
   private readonly previewEl = viewChild<ElementRef<HTMLVideoElement>>('preview');
-  private applyTimer?: ReturnType<typeof setTimeout>;
+  private readonly screenEl = viewChild<ElementRef<HTMLElement>>('screen');
 
   constructor() {
     effect(() => {
@@ -50,62 +46,22 @@ export class StreamerPanel implements OnInit, OnDestroy {
       const stream = this.s.preview();
       if (el) el.srcObject = stream;
     });
-    // When the limits change (live, from the admin), pull the current settings inside them. If that changes
-    // anything, the effect below sends it to the running encoder.
-    effect(() => {
-      const limits = this.s.limits();
-      untracked(() =>
-        this.settings.update((cur) => {
-          const next = clampSettings(cur, limits);
-          return JSON.stringify(next) === JSON.stringify(cur) ? cur : next;
-        }),
-      );
-    });
-    // Persist settings and push live-adjustable ones to the running encoder.
-    effect(() => {
-      const cur = this.settings();
-      saveSettings(cur);
-      untracked(() => {
-        clearTimeout(this.applyTimer);
-        this.applyTimer = setTimeout(() => void this.s.applyLive(cur), 150);
-      });
-    });
   }
 
   ngOnInit(): void {
     void this.refreshDevices(false);
   }
 
-  ngOnDestroy(): void {
-    clearTimeout(this.applyTimer);
-  }
-
   protected patch(values: Partial<StreamSettings>): void {
-    this.settings.update((cur) => ({ ...cur, ...values }));
+    this.s.patch(values);
   }
 
   protected applyPreset(p: Preset): void {
-    this.settings.update((cur) => clampSettings({ ...cur, ...p.values }, this.s.limits()));
+    this.s.applyPreset(p);
   }
 
   protected isPreset(p: Preset): boolean {
-    const cur = this.settings() as unknown as Record<string, unknown>;
-    const want = clampSettings({ ...this.settings(), ...p.values }, this.s.limits()) as unknown as Record<string, unknown>;
-    return Object.keys(p.values).every((k) => cur[k] === want[k]);
-  }
-
-  /** Within an account's limits several presets collapse into the same thing: show each result once. */
-  private distinctPresets(): Preset[] {
-    const limits = this.s.limits();
-    if (!limits) return PRESETS;
-    const seen = new Set<string>();
-    return PRESETS.filter((p) => {
-      const c = clampSettings({ ...loadSettings(), ...p.values }, limits);
-      const id = [c.height, c.fps, c.bitrateMbps, c.priority].join();
-      if (seen.has(id)) return false;
-      seen.add(id);
-      return true;
-    });
+    return isPresetActive(p, this.settings(), this.s.limits());
   }
 
   protected async refreshDevices(askPermission: boolean): Promise<void> {
@@ -123,5 +79,15 @@ export class StreamerPanel implements OnInit, OnDestroy {
 
   protected deviceLabel(d: MediaDeviceInfo, i: number): string {
     return d.label || `Audio input ${i + 1}`;
+  }
+
+  protected onFullscreenChange(): void {
+    this.fullscreen.set(document.fullscreenElement === this.screenEl()?.nativeElement);
+  }
+
+  /** The control bar is inside the element that goes fullscreen, so it stays usable. */
+  protected async toggleFullscreen(): Promise<void> {
+    if (document.fullscreenElement) await document.exitFullscreen();
+    else await this.screenEl()?.nativeElement.requestFullscreen().catch(() => undefined);
   }
 }

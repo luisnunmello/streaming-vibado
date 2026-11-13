@@ -1,4 +1,4 @@
-import { Injectable, inject, signal } from '@angular/core';
+import { Injectable, signal } from '@angular/core';
 import { Device, type types } from 'mediasoup-client';
 import { SignalingService } from './signaling.service';
 
@@ -18,7 +18,8 @@ export type ViewerProblem = 'notfound' | 'kicked' | 'busy' | 'other';
 /** Receives a room's live stream from the SFU. Anonymous: no login needed. */
 @Injectable({ providedIn: 'root' })
 export class ViewerService {
-  private readonly sig = inject(SignalingService);
+  /** Its own connection: a streamer watching their own room in the same tab keeps their stream connection. */
+  private readonly sig = new SignalingService();
 
   readonly live = signal(false);
   readonly connecting = signal(true);

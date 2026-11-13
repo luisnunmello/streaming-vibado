@@ -118,6 +118,26 @@ export function resolutionOptions(limits: Limits | null): { value: number; label
   return opts;
 }
 
+/** Presets as this account can use them: values above the limits collapse into the same result, so each result is listed once. */
+export function distinctPresets(limits: Limits | null): Preset[] {
+  if (!limits) return PRESETS;
+  const seen = new Set<string>();
+  return PRESETS.filter((p) => {
+    const c = clampSettings({ ...DEFAULT_SETTINGS, ...p.values }, limits);
+    const id = [c.height, c.fps, c.bitrateMbps, c.priority].join();
+    if (seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
+}
+
+/** Is `current` what applying the preset would give? */
+export function isPresetActive(p: Preset, current: StreamSettings, limits: Limits | null): boolean {
+  const cur = current as unknown as Record<string, unknown>;
+  const want = clampSettings({ ...current, ...p.values }, limits) as unknown as Record<string, unknown>;
+  return Object.keys(p.values).every((k) => cur[k] === want[k]);
+}
+
 export function saveSettings(s: StreamSettings): void {
   try {
     localStorage.setItem(KEY, JSON.stringify(s));

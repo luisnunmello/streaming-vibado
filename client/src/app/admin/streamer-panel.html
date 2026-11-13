@@ -1,14 +1,35 @@
 <div class="layout">
   <div class="col">
     <div class="card stage-card">
-      <div class="screen">
+      <div class="screen" #screen [class.fs]="fullscreen()">
         <video #preview autoplay muted playsinline [class.hidden]="!s.preview()"></video>
         @if (!s.preview()) {
           <div class="placeholder">
             <p>@if (s.state() === 'starting') { Pick a screen, window or tab… } @else { Preview appears here }</p>
           </div>
         }
+        @if (live()) {
+          <div class="overlay">
+            <app-control-bar [ctl]="local" [compact]="true" />
+            <button type="button" class="fsbtn" (click)="toggleFullscreen()" [attr.aria-label]="fullscreen() ? 'Exit full screen' : 'Full screen preview'" title="Full screen preview">
+              <svg viewBox="0 0 24 24" width="18" height="18">
+                @if (fullscreen()) {
+                  <path fill="currentColor" d="M5 16h3v3h2v-5H5v2zm3-8H5v2h5V5H8v3zm6 11h2v-3h3v-2h-5v5zm2-11V5h-2v5h5V8h-3z"/>
+                } @else {
+                  <path fill="currentColor" d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>
+                }
+              </svg>
+            </button>
+          </div>
+        }
       </div>
+
+      @if (s.changeRequested()) {
+        <div class="banner">
+          <span>Your room page asked to change the screen. Pick the new one here (the browser needs a click in this tab).</span>
+          <button type="button" class="btn primary small" (click)="s.changeSource()">Choose new screen</button>
+        </div>
+      }
 
       <div class="statusbar">
         <span class="pill" [class.live]="live()" [class.starting]="s.state() === 'starting'">

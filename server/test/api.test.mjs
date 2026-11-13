@@ -147,6 +147,16 @@ describe('accounts, referrals and rooms', () => {
     state.secret = secret;
   });
 
+  it('tells the owner (and the admin, for the main room) that a room is theirs', async () => {
+    const info = (slug, token, key = '') => api('GET', `/api/rooms/${slug}/info${key ? '?key=' + key : ''}`, { token });
+    assert.equal((await info(state.pub.slug, state.aliceToken)).mine, true, 'owner');
+    assert.equal((await info(state.pub.slug)).mine, false, 'anonymous visitor');
+    assert.equal((await info(state.pub.slug, admin)).mine, false, 'the admin does not own a user\'s room');
+    assert.equal((await info('main', admin)).mine, true, 'the admin owns the main room');
+    assert.equal((await info('main', state.aliceToken)).mine, false);
+    assert.equal((await info(state.priv.slug, state.aliceToken, state.secret)).mine, true);
+  });
+
   it('referrals: quota, single use, no referrals for invited users, limits never exceed the inviter', async () => {
     const t = state.aliceToken;
     const k1 = await api('POST', '/api/me/referrals', { token: t });

@@ -266,3 +266,56 @@ video {
     opacity: 0.3;
   }
 }
+
+.top .spacer {
+  flex: 1;
+}
+
+.ownerbtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem 0.7rem;
+  border: 0;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  font: inherit;
+  font-size: 0.9rem;
+  cursor: pointer;
+  &:hover,
+  &.on {
+    background: rgba(124, 156, 255, 0.45);
+  }
+}
+
+.owner {
+  position: absolute;
+  top: 3.3rem;
+  right: 1rem;
+  z-index: 4;
+  display: grid;
+  gap: 0.5rem;
+  max-width: min(560px, calc(100% - 2rem));
+  transition: opacity 0.25s;
+
+  .note,
+  .idle-note p {
+    margin: 0;
+    padding: 0.5rem 0.7rem;
+    border-radius: 8px;
+    background: rgba(14, 18, 27, 0.88);
+    font-size: 0.82rem;
+    color: #c6cedd;
+  }
+  .idle-note {
+    display: grid;
+    gap: 0.5rem;
+    justify-items: start;
+  }
+}
+
+.stage.idle .owner {
+  opacity: 0;
+  pointer-events: none;
+}

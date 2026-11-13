@@ -1,9 +1,19 @@
-import { Injectable, inject, signal } from '@angular/core';
+import { Injectable, computed, effect, inject, signal, untracked } from '@angular/core';
 import { Device, type types } from 'mediasoup-client';
 import { ApiService } from './api.service';
 import type { Limits } from './models';
 import { SignalingService } from './signaling.service';
-import { clampSettings, type StreamSettings, type StreamStats } from './stream-settings';
+import {
+  DEFAULT_SETTINGS,
+  clampSettings,
+  distinctPresets,
+  isPresetActive,
+  loadSettings,
+  saveSettings,
+  type Preset,
+  type StreamSettings,
+  type StreamStats,
+} from './stream-settings';
 
 export type StreamerState = 'idle' | 'starting' | 'live';
 type Codec = 'h264' | 'vp8' | 'vp9' | 'av1';
@@ -44,6 +54,14 @@ export class StreamerService {
   /** The account's limits; null for the admin. */
   readonly limits = signal<Limits | null>(null);
   readonly changingSource = signal(false);
+  /** The stream settings. The ones that can change live reach the running encoder as they change. */
+  readonly settings = signal<StreamSettings>({ ...DEFAULT_SETTINGS });
+  /** Another tab asked to change the screen. Only this tab can open the picker, so it shows a button for it. */
+  readonly changeRequested = signal(false);
+  readonly presetChoices = computed(() => distinctPresets(this.limits()));
+  private settingsReady = false;
+  private applyTimer?: ReturnType<typeof setTimeout>;
+  private channel?: BroadcastChannel;
 
   /** Settings the running stream was last given. */
   private current?: StreamSettings;
@@ -64,6 +82,106 @@ export class StreamerService {
   private lastBytes = 0;
   private lastStatsAt = 0;
   private unsubs: Array<() => void> = [];
+
+  constructor() {
+    // When the limits change (live, from the admin), pull the current settings inside them. If that changes
+    // anything, the effect below sends it on to the running encoder.
+    effect(() => {
+      const limits = this.limits();
+      if (!untracked(() => this.settingsReady)) return;
+      untracked(() =>
+        this.settings.update((cur) => {
+          const next = clampSettings(cur, limits);
+          return JSON.stringify(next) === JSON.stringify(cur) ? cur : next;
+        }),
+      );
+    });
+    // Remember the settings and push the live-adjustable ones to the running encoder.
+    effect(() => {
+      const cur = this.settings();
+      if (!untracked(() => this.settingsReady)) return;
+      saveSettings(cur);
+      untracked(() => {
+        clearTimeout(this.applyTimer);
+        this.applyTimer = setTimeout(() => void this.applyLive(cur), 150);
+      });
+    });
+    this.startControlHost();
+  }
+
+  patch(values: Partial<StreamSettings>): void {
+    this.settings.update((cur) => ({ ...cur, ...values }));
+  }
+
+  applyPreset(p: Preset): void {
+    this.settings.update((cur) => clampSettings({ ...cur, ...p.values }, this.limits()));
+  }
+
+  toggleMute(): void {
+    this.patch({ muted: !this.settings().muted });
+  }
+
+  // ---------------------------------------------------------------- control from other tabs
+
+  /** Status other tabs of this site (e.g. the viewer page of the room) use to show streamer controls. */
+  /** Snapshot of the state other tabs and control bars show. */
+  readonly status = computed(() => ({
+    t: 'status' as const,
+    slug: this.room()?.slug ?? null,
+    live: this.state() === 'live',
+    muted: this.settings().muted,
+    changing: this.changingSource(),
+    requested: this.changeRequested(),
+    hasAudio: this.hasAudio(),
+    presets: this.presetChoices().map((p) => ({ label: p.label, active: isPresetActive(p, this.settings(), this.limits()) })),
+  }));
+
+  private startControlHost(): void {
+    if (typeof BroadcastChannel === 'undefined') return;
+    const channel = new BroadcastChannel('streamer-control');
+    this.channel = channel;
+    channel.onmessage = (ev) => this.onRemoteCommand(ev.data);
+    effect(() => {
+      const st = this.status();
+      if (st.slug) channel.postMessage(st);
+    });
+    // A heartbeat, so other tabs notice when this one goes away.
+    setInterval(() => {
+      const st = untracked(this.status);
+      if (st.live) channel.postMessage(st);
+    }, 2000);
+  }
+
+  private onRemoteCommand(msg: { t?: string; value?: boolean; index?: number }): void {
+    if (msg?.t === 'hello') {
+      const st = this.status();
+      if (st.slug) this.channel?.postMessage(st);
+      return;
+    }
+    if (this.state() !== 'live') return;
+    switch (msg?.t) {
+      case 'mute':
+        this.patch({ muted: !!msg.value });
+        break;
+      case 'preset': {
+        const p = this.presetChoices()[msg.index ?? -1];
+        if (p) this.applyPreset(p);
+        break;
+      }
+      case 'stop':
+        void this.stop();
+        break;
+      case 'changeSource':
+        // The picker needs a click in this tab: ask for it.
+        this.changeRequested.set(true);
+        try {
+          window.focus();
+        } catch {
+          /* browsers may refuse */
+        }
+        break;
+    }
+  }
 
   // ---------------------------------------------------------------- room connection
 
@@ -118,6 +236,8 @@ export class StreamerService {
     if (res.role !== 'owner') throw new Error('This is not your room');
     this.room.set(res.room);
     this.limits.set(res.limits ?? null);
+    this.settings.set(clampSettings(loadSettings({ adaptive: !!res.limits, codec: res.limits ? 'vp8' : 'h264' }), res.limits ?? null));
+    this.settingsReady = true;
     this.rtpCapabilities = res.rtpCapabilities;
   }
 
@@ -132,6 +252,8 @@ export class StreamerService {
     this.unsubs.forEach((u) => u());
     this.unsubs = [];
     this.sig.close();
+    this.settingsReady = false;
+    this.changeRequested.set(false);
     this.viewers.set(0);
     this.room.set(null);
     this.limits.set(null);
@@ -194,6 +316,7 @@ export class StreamerService {
     this.stats.set(null);
     this.source.set(null);
     this.hasAudio.set(false);
+    this.changeRequested.set(false);
     this.state.set('idle');
   }
 
@@ -256,6 +379,7 @@ export class StreamerService {
     const s = this.current;
     if (!s) return;
     this.changingSource.set(true);
+    this.changeRequested.set(false);
     this.error.set(null);
     this.notice.set(null);
     try {

@@ -81,6 +81,10 @@ The server also protects your connection as a whole: an upload budget with admis
 - **Adaptive quality** (set at start): sends three quality levels so the server can lower quality for viewers instead of refusing them. On by default for users.
 - **Audio:** screen audio (all / shared window only), plus an optional extra input (mic or virtual cable) mixed in, with volume sliders and a mute switch that work live.
 - **Change the shared window without stopping:** the *Change screen / window* button opens the picker again and swaps the picture (and screen audio) on the same connection. Viewers keep watching without interruption.
+- **Quick controls on the preview:** a small bar over the preview video has *Screen* (change the shared screen/window), *Mute*, a *Quality* dropdown (the quality presets) and *Stop*, plus a button that puts the preview in full screen with the bar still usable.
+- **Controls on your room's page:** when you open your own room's page (`/r/<room>`; the admin gets this on `/r/main`), a *Streamer controls* button shows the same bar over the video.
+  - **Studio → "View in this tab":** the stream keeps running while you move around the dashboard and onto the room page, and everything works, including *Screen*. A *LIVE* chip in the dashboard header takes you back to the studio.
+  - **Room page opened in another tab:** it controls the studio tab. Mute, quality and Stop work directly. A browser only opens the screen picker for a click in the tab that owns the capture, so *Screen* asks the studio tab, which shows a *Choose new screen* button. Close the studio tab and the stream ends, as before.
 - **Live stats:** sent bitrate, fps, resolution, encode time, packet loss, RTT, and whether the encoder is limited by CPU or bandwidth.
 
 **Excluding specific apps from the audio:** browsers can't pick individual apps. Use *Shared window only* (Chrome/Edge on Windows), or install a virtual audio cable (e.g. VB-CABLE), route only the wanted apps to it in the Windows volume mixer, and select it as the extra input with screen audio set to *No screen audio*.

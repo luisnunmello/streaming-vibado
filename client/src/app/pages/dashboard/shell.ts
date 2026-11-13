@@ -1,6 +1,7 @@
 import { Component, OnDestroy, OnInit, inject } from '@angular/core';
 import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { AuthService } from '../../core/auth.service';
+import { StreamerService } from '../../core/streamer.service';
 
 @Component({
   selector: 'app-shell',
@@ -21,6 +22,11 @@ import { AuthService } from '../../core/auth.service';
         <a routerLink="/dashboard/account" routerLinkActive="on">Account</a>
       </nav>
       <span class="spacer"></span>
+      @if (streamer.state() === 'live' && streamer.room(); as room) {
+        <a [routerLink]="['/dashboard/rooms', room.slug]" class="livechip" title="You are streaming. Click to go back to the studio.">
+          <i></i> LIVE · {{ room.name }}
+        </a>
+      }
       <a routerLink="/lobbies" class="link">Public rooms</a>
       <span class="who">{{ auth.me()?.name }} <span class="badge">{{ auth.me()?.role }}</span></span>
       <button type="button" class="btn small" (click)="logout()">Sign out</button>
@@ -72,6 +78,31 @@ import { AuthService } from '../../core/auth.service';
         color: var(--text);
       }
     }
+    .livechip {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.45rem;
+      padding: 0.3rem 0.7rem;
+      border-radius: 999px;
+      border: 1px solid #d92d20;
+      background: rgba(217, 45, 32, 0.15);
+      color: #ff8b82;
+      font-size: 0.82rem;
+      font-weight: 600;
+      text-decoration: none;
+      i {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: #ff5b4d;
+        animation: blink 1.6s ease-in-out infinite;
+      }
+    }
+    @keyframes blink {
+      50% {
+        opacity: 0.3;
+      }
+    }
     .who {
       font-size: 0.9rem;
     }
@@ -82,6 +113,7 @@ import { AuthService } from '../../core/auth.service';
 })
 export class Shell implements OnInit, OnDestroy {
   protected readonly auth = inject(AuthService);
+  protected readonly streamer = inject(StreamerService);
   private readonly router = inject(Router);
   private timer?: ReturnType<typeof setInterval>;
 
@@ -99,6 +131,7 @@ export class Shell implements OnInit, OnDestroy {
   }
 
   protected async logout(): Promise<void> {
+    await this.streamer.leave(); // signing out ends any running stream
     await this.auth.logout();
     await this.router.navigateByUrl('/');
   }

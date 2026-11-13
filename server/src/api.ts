@@ -174,7 +174,10 @@ export function buildApi(live: LiveService, budget: BudgetManager): Router {
       const key = typeof req.query['key'] === 'string' ? req.query['key'] : '';
       const visible = !!room && (room.ownerId === null || owner?.status === 'active') && (room.visibility === 'public' || key === room.secret);
       if (!room || !visible) throw new HttpError(404, 'Room not found');
-      res.json({ name: room.name, slug: room.slug, ownerName: owner?.name ?? 'Admin', visibility: room.visibility, ...live.info(room.id) });
+      // `mine`: the caller is signed in and owns this room (the admin owns the main room), so the viewer page can offer streamer controls.
+      const caller = getSession(bearer(req));
+      const mine = !!caller && ((caller.role === 'admin' && room.ownerId === null) || (caller.role === 'user' && caller.userId === room.ownerId));
+      res.json({ name: room.name, slug: room.slug, ownerName: owner?.name ?? 'Admin', visibility: room.visibility, mine, ...live.info(room.id) });
     }),
   );
 
