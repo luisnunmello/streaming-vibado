@@ -325,7 +325,9 @@ export class StreamerService {
 
   /** Capture already at the chosen output height (never upscaled): feeding the encoder a 4K picture made Chrome start at a quarter size. */
   private captureConstraints(fps: number, height: number): MediaTrackConstraints {
-    return { frameRate: { ideal: fps, max: fps }, width: { max: 3840 }, height: { max: height > 0 ? Math.min(height, 2160) : 2160 } };
+    // Ask the capture for more than the target: Chrome's capture frame limiter drops frames so the result
+    // lands at about 80% of an exact limit (60 became 48). The encoder's maxFramerate does the real limiting.
+    return { frameRate: { ideal: Math.min(144, Math.round(fps * 1.5)), max: 144 }, width: { max: 3840 }, height: { max: height > 0 ? Math.min(height, 2160) : 2160 } };
   }
 
   private async capture(s: StreamSettings): Promise<void> {
