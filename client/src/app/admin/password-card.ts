@@ -7,7 +7,7 @@ import { AuthService } from '../core/auth.service';
   imports: [FormsModule],
   template: `
     <div class="card">
-      <h2>Master password</h2>
+      <h2>Change password</h2>
       <form (ngSubmit)="submit()" autocomplete="off">
         <div class="field">
           <label for="cur">Current password</label>
@@ -26,7 +26,7 @@ import { AuthService } from '../core/auth.service';
           <p class="error">{{ error() }}</p>
         }
         @if (done()) {
-          <p class="ok">Password changed. Other admin sessions were signed out.</p>
+          <p class="ok">Password changed. Your other sessions were signed out.</p>
         }
       </form>
     </div>

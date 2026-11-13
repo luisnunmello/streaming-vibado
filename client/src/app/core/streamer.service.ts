@@ -1,10 +1,13 @@
 import { Injectable, inject, signal } from '@angular/core';
 import { Device, type types } from 'mediasoup-client';
-import { AuthService } from './auth.service';
+import { ApiService } from './api.service';
+import type { Limits } from './models';
 import { SignalingService } from './signaling.service';
-import { type StreamSettings, type StreamStats } from './stream-settings';
+import { clampSettings, type StreamSettings, type StreamStats } from './stream-settings';
 
 export type StreamerState = 'idle' | 'starting' | 'live';
+type Codec = 'h264' | 'vp8' | 'vp9' | 'av1';
+type Layout = 'single' | 'simulcast' | 'svc';
 
 interface AudioMixer {
   ctx: AudioContext;
@@ -12,14 +15,20 @@ interface AudioMixer {
   screenGain?: GainNode;
   deviceGain?: GainNode;
   track: MediaStreamTrack;
-  sources: MediaStream[];
 }
 
-/** Capture + publish the screen to the SFU. Only usable from an authenticated admin session. */
+export interface RoomInfo {
+  slug: string;
+  name: string;
+  visibility: 'public' | 'private';
+  ownerName: string;
+}
+
+/** Capture + publish the screen into a room the signed-in user owns. */
 @Injectable({ providedIn: 'root' })
 export class StreamerService {
   private readonly sig = inject(SignalingService);
-  private readonly auth = inject(AuthService);
+  private readonly api = inject(ApiService);
 
   readonly state = signal<StreamerState>('idle');
   readonly error = signal<string | null>(null);
@@ -30,7 +39,11 @@ export class StreamerService {
   /** Native size of the captured surface. */
   readonly source = signal<{ width: number; height: number; fps: number } | null>(null);
   readonly hasAudio = signal(false);
+  readonly room = signal<RoomInfo | null>(null);
+  /** The account's limits; null for the admin. */
+  readonly limits = signal<Limits | null>(null);
 
+  private rtpCapabilities?: types.RtpCapabilities;
   private device?: Device;
   private transport?: types.Transport;
   private videoProducer?: types.Producer;
@@ -38,22 +51,31 @@ export class StreamerService {
   private displayStream?: MediaStream;
   private micStream?: MediaStream;
   private mixer?: AudioMixer;
+  private layout: Layout = 'single';
+  private activeCodec: Codec = 'h264';
   private statsTimer?: ReturnType<typeof setInterval>;
   private appliedFps = 0;
   private lastBytes = 0;
   private lastStatsAt = 0;
   private unsubs: Array<() => void> = [];
 
-  // ---- connection used by the admin page (viewer count, revocation) ----
-  connectAdmin(onRevoked: () => void): void {
-    const token = this.auth.token();
-    if (!token) return;
+  // ---------------------------------------------------------------- room connection
+
+  /** Connects and joins the room as its owner. Rejects when the room is not yours. */
+  async enter(slug: string, onSessionEnded: () => void): Promise<void> {
+    await this.leave();
+    const token = this.api.token();
+    if (!token) throw new Error('Not signed in');
     this.sig.open(token);
     this.unsubs.push(
       this.sig.on<number>('viewerCount', (n) => this.viewers.set(n)),
       this.sig.on('sessionRevoked', () => {
-        void this.stop();
-        onRevoked();
+        void this.stop(false);
+        onSessionEnded();
+      }),
+      this.sig.on<{ reason: string }>('streamEnded', ({ reason }) => {
+        this.notice.set(reason);
+        void this.stop(false);
       }),
       this.sig.on('disconnect', () => {
         if (this.state() !== 'idle') {
@@ -62,19 +84,41 @@ export class StreamerService {
         }
       }),
     );
+    await new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        off();
+        reject(new Error('Could not connect to the server'));
+      }, 10_000);
+      const off = this.sig.on('connect', () => {
+        clearTimeout(timer);
+        off();
+        resolve();
+      });
+    });
+    const res = await this.sig.request<{ role: string; room: RoomInfo; limits: Limits | null; rtpCapabilities: types.RtpCapabilities }>('joinRoom', { slug });
+    if (res.role !== 'owner') throw new Error('This is not your room');
+    this.room.set(res.room);
+    this.limits.set(res.limits ?? null);
+    this.rtpCapabilities = res.rtpCapabilities;
   }
 
-  disconnectAdmin(): void {
-    void this.stop();
+  async leave(): Promise<void> {
+    await this.stop();
     this.unsubs.forEach((u) => u());
     this.unsubs = [];
     this.sig.close();
     this.viewers.set(0);
+    this.room.set(null);
+    this.limits.set(null);
+    this.error.set(null);
+    this.notice.set(null);
   }
 
-  // ---- start / stop ----
-  async start(s: StreamSettings): Promise<void> {
-    if (this.state() !== 'idle') return;
+  // ---------------------------------------------------------------- start / stop
+
+  async start(requested: StreamSettings): Promise<void> {
+    if (this.state() !== 'idle' || !this.room()) return;
+    const s = clampSettings(requested, this.limits());
     this.error.set(null);
     this.notice.set(null);
     if (!navigator.mediaDevices?.getDisplayMedia) {
@@ -108,7 +152,7 @@ export class StreamerService {
         for (const producerId of producerIds) await this.sig.request('closeProducer', { producerId });
         await this.sig.request('closeTransport', { transportId });
       } catch {
-        /* server cleans up on disconnect anyway */
+        /* the server cleans up on disconnect anyway */
       }
     }
     this.displayStream?.getTracks().forEach((t) => {
@@ -126,16 +170,20 @@ export class StreamerService {
     this.state.set('idle');
   }
 
-  // ---- capture ----
+  // ---------------------------------------------------------------- capture
+
+  /** Capture at the screen's native size (up to 4K); the encoder downscales to the chosen output. */
+  private captureConstraints(fps: number): MediaTrackConstraints {
+    return { frameRate: { ideal: fps, max: fps }, width: { max: 3840 }, height: { max: 2160 } };
+  }
+
   private async capture(s: StreamSettings): Promise<void> {
     const wantScreenAudio = s.audioMode !== 'none';
-    // Chromium-only options (ignored elsewhere), hence the loose typing.
     this.appliedFps = s.fps;
+    // Chromium-only options (ignored elsewhere), hence the loose typing.
     const options: any = {
       video: { cursor: 'always', ...this.captureConstraints(s.fps) },
-      audio: wantScreenAudio
-        ? { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 2 }
-        : false,
+      audio: wantScreenAudio ? { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 2 } : false,
       systemAudio: wantScreenAudio ? 'include' : 'exclude',
       windowAudio: s.audioMode === 'window' ? 'window' : 'system',
       selfBrowserSurface: 'exclude',
@@ -146,14 +194,12 @@ export class StreamerService {
     this.displayStream = display;
 
     const video = display.getVideoTracks()[0];
-    video.contentHint = s.priority === 'motion' ? 'motion' : s.priority === 'detail' ? 'detail' : '';
+    video.contentHint = this.hintFor(s);
     video.onended = () => void this.stop();
     this.updateSource(video);
 
     if (wantScreenAudio && display.getAudioTracks().length === 0) {
-      this.notice.set(
-        'No screen audio was captured. In the picker, tick "Share system audio" (screen) or "Share tab audio" (tab).',
-      );
+      this.notice.set('No screen audio was captured. In the picker, tick "Share system audio" (screen) or "Share tab audio" (tab).');
     }
 
     const screenAudio = display.getAudioTracks()[0];
@@ -161,13 +207,7 @@ export class StreamerService {
       let deviceAudio: MediaStreamTrack | undefined;
       if (s.audioDeviceId) {
         this.micStream = await navigator.mediaDevices.getUserMedia({
-          audio: {
-            deviceId: { exact: s.audioDeviceId },
-            echoCancellation: false,
-            noiseSuppression: false,
-            autoGainControl: false,
-            channelCount: 2,
-          },
+          audio: { deviceId: { exact: s.audioDeviceId }, echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 2 },
         });
         deviceAudio = this.micStream.getAudioTracks()[0];
       }
@@ -176,9 +216,8 @@ export class StreamerService {
     this.preview.set(new MediaStream([video]));
   }
 
-  /** Capture at the screen's native size (up to 4K); the encoder downscales to the chosen output. */
-  private captureConstraints(fps: number): MediaTrackConstraints {
-    return { frameRate: { ideal: fps, max: fps }, width: { max: 3840 }, height: { max: 2160 } };
+  private hintFor(s: StreamSettings): string {
+    return s.priority === 'motion' ? 'motion' : s.priority === 'detail' ? 'detail' : '';
   }
 
   private createMixer(screen: MediaStreamTrack | undefined, device: MediaStreamTrack | undefined, s: StreamSettings): AudioMixer {
@@ -187,19 +226,16 @@ export class StreamerService {
     master.gain.value = s.muted ? 0 : 1;
     const dest = ctx.createMediaStreamDestination();
     master.connect(dest);
-    const sources: MediaStream[] = [];
     const connect = (track: MediaStreamTrack | undefined, gain: number) => {
       if (!track) return undefined;
-      const stream = new MediaStream([track]);
-      sources.push(stream);
       const g = ctx.createGain();
       g.gain.value = gain;
-      ctx.createMediaStreamSource(stream).connect(g).connect(master);
+      ctx.createMediaStreamSource(new MediaStream([track])).connect(g).connect(master);
       return g;
     };
     const screenGain = connect(screen, s.screenAudioGain);
     const deviceGain = connect(device, s.deviceGain);
-    return { ctx, master, screenGain, deviceGain, track: dest.stream.getAudioTracks()[0], sources };
+    return { ctx, master, screenGain, deviceGain, track: dest.stream.getAudioTracks()[0] };
   }
 
   private updateSource(track: MediaStreamTrack) {
@@ -207,11 +243,11 @@ export class StreamerService {
     this.source.set({ width: st.width ?? 0, height: st.height ?? 0, fps: Math.round(st.frameRate ?? 0) });
   }
 
-  // ---- publish ----
+  // ---------------------------------------------------------------- publish
+
   private async publish(s: StreamSettings): Promise<void> {
-    const { rtpCapabilities } = await this.sig.request<{ rtpCapabilities: types.RtpCapabilities }>('rtpCapabilities');
     this.device = new Device();
-    await this.device.load({ routerRtpCapabilities: rtpCapabilities });
+    await this.device.load({ routerRtpCapabilities: this.rtpCapabilities! });
 
     const params = await this.sig.request<any>('createTransport', { direction: 'send' });
     const transport = this.device.createSendTransport({
@@ -238,11 +274,13 @@ export class StreamerService {
 
     const video = this.displayStream!.getVideoTracks()[0];
     const codec = this.pickCodec(s);
+    this.activeCodec = codec.mimeType.split('/')[1].toLowerCase() as Codec;
+    this.layout = !s.adaptive ? 'single' : this.activeCodec === 'vp9' || this.activeCodec === 'av1' ? 'svc' : 'simulcast';
     const maxBitrate = Math.round(s.bitrateMbps * 1_000_000);
     this.videoProducer = await transport.produce({
       track: video,
       codec,
-      encodings: [this.encoding(s)],
+      encodings: this.encodings(s),
       codecOptions: {
         // Start near the target instead of ramping up from a few hundred kbps.
         videoGoogleStartBitrate: Math.round((maxBitrate * 0.6) / 1000),
@@ -289,32 +327,64 @@ export class StreamerService {
     return Math.max(1, native / s.height);
   }
 
-  private encoding(s: StreamSettings): RTCRtpEncodingParameters {
-    return {
-      maxBitrate: Math.round(s.bitrateMbps * 1_000_000),
-      maxFramerate: s.fps,
-      scaleResolutionDownBy: this.scaleFor(s),
+  /**
+   * One encoding normally. With "adaptive quality" there are three levels (about 100%, 40% and 15% of
+   * the bitrate, at full, 1/2 and 1/4 size) so the server can pick a lower one for a viewer or when it is busy.
+   */
+  private encodings(s: StreamSettings): RTCRtpEncodingParameters[] {
+    const maxBitrate = Math.round(s.bitrateMbps * 1_000_000);
+    const scale = this.scaleFor(s);
+    const common = { maxFramerate: s.fps };
+    if (this.layout === 'simulcast') {
+      // Chrome rejects `priority`/`networkPriority` when there is more than one encoding.
+      return [
+        { rid: 'r0', ...common, maxBitrate: Math.round(maxBitrate * 0.15), scaleResolutionDownBy: scale * 4 },
+        { rid: 'r1', ...common, maxBitrate: Math.round(maxBitrate * 0.4), scaleResolutionDownBy: scale * 2 },
+        { rid: 'r2', ...common, maxBitrate, scaleResolutionDownBy: scale },
+      ];
+    }
+    const single: RTCRtpEncodingParameters & { scalabilityMode?: string } = {
+      ...common,
+      maxBitrate,
+      scaleResolutionDownBy: scale,
       priority: 'high',
       networkPriority: 'high',
     };
+    if (this.layout === 'svc') single.scalabilityMode = 'L3T3';
+    return [single];
   }
 
-  // ---- live adjustments ----
-  async applyLive(s: StreamSettings): Promise<void> {
+  // ---------------------------------------------------------------- live adjustments
+
+  async applyLive(requested: StreamSettings): Promise<void> {
     if (this.state() !== 'live') return;
+    const s = clampSettings(requested, this.limits());
     const video = this.displayStream?.getVideoTracks()[0];
     if (video) {
-      video.contentHint = s.priority === 'motion' ? 'motion' : s.priority === 'detail' ? 'detail' : '';
+      video.contentHint = this.hintFor(s);
       if (s.fps !== this.appliedFps) {
         this.appliedFps = s.fps;
         // applyConstraints replaces the whole set, so the size caps must be sent again,
         // and we must wait for it before reading the (possibly changed) source size.
-        await video.applyConstraints({ ...this.captureConstraints(s.fps) }).catch(() => undefined);
+        await video.applyConstraints(this.captureConstraints(s.fps)).catch(() => undefined);
       }
       this.updateSource(video);
     }
+    // Update every layer through the sender: the library helper would give all layers the same values.
     try {
-      await this.videoProducer?.setRtpEncodingParameters(this.encoding(s));
+      const sender = this.videoProducer?.rtpSender;
+      if (sender) {
+        const params = sender.getParameters();
+        const desired = this.encodings(s);
+        params.encodings.forEach((e, i) => {
+          const d = desired[i];
+          if (!d) return;
+          e.maxBitrate = d.maxBitrate;
+          e.maxFramerate = d.maxFramerate;
+          e.scaleResolutionDownBy = d.scaleResolutionDownBy;
+        });
+        await sender.setParameters(params);
+      }
     } catch (e) {
       console.warn('Could not update encoder parameters', e);
     }
@@ -327,7 +397,8 @@ export class StreamerService {
     }
   }
 
-  // ---- stats ----
+  // ---------------------------------------------------------------- stats
+
   private startStats() {
     this.lastBytes = 0;
     this.lastStatsAt = 0;
@@ -339,39 +410,44 @@ export class StreamerService {
     if (!producer || !this.transport) return;
     try {
       const [report, transportReport] = await Promise.all([producer.getStats(), this.transport.getStats()]);
-      let out: any;
+      const outs: any[] = [];
       let remote: any;
       report.forEach((r: any) => {
-        if (r.type === 'outbound-rtp' && r.kind === 'video') out = r;
+        if (r.type === 'outbound-rtp' && r.kind === 'video') outs.push(r);
         if (r.type === 'remote-inbound-rtp' && r.kind === 'video') remote = r;
       });
       let available: number | null = null;
       transportReport.forEach((r: any) => {
         if (r.type === 'candidate-pair' && r.nominated && r.availableOutgoingBitrate) available = r.availableOutgoingBitrate / 1000;
       });
-      if (!out) return;
+      if (outs.length === 0) return;
+      // With several quality levels the biggest one describes the output; bytes are summed over all.
+      const top = outs.reduce((a, b) => ((b.frameWidth ?? 0) > (a.frameWidth ?? 0) ? b : a));
+      const bytes = outs.reduce((sum, o) => sum + (o.bytesSent ?? 0), 0);
       const now = performance.now();
-      const bitrateKbps = this.lastStatsAt ? ((out.bytesSent - this.lastBytes) * 8) / (now - this.lastStatsAt) : 0;
-      this.lastBytes = out.bytesSent;
+      const bitrateKbps = this.lastStatsAt ? ((bytes - this.lastBytes) * 8) / (now - this.lastStatsAt) : 0;
+      this.lastBytes = bytes;
       this.lastStatsAt = now;
-      const reason = out.qualityLimitationReason as string | undefined;
+      const reason = top.qualityLimitationReason as string | undefined;
       this.stats.set({
         bitrateKbps: Math.max(0, Math.round(bitrateKbps)),
-        fps: Math.round(out.framesPerSecond ?? 0),
-        width: out.frameWidth ?? 0,
-        height: out.frameHeight ?? 0,
+        fps: Math.round(top.framesPerSecond ?? 0),
+        width: top.frameWidth ?? 0,
+        height: top.frameHeight ?? 0,
         limitation: reason === 'cpu' ? 'cpu' : reason === 'bandwidth' ? 'bandwidth' : reason && reason !== 'none' ? 'other' : 'none',
-        encodeMs: out.framesEncoded ? Math.round((out.totalEncodeTime / out.framesEncoded) * 1000 * 10) / 10 : 0,
+        encodeMs: top.framesEncoded ? Math.round((top.totalEncodeTime / top.framesEncoded) * 1000 * 10) / 10 : 0,
         rttMs: remote?.roundTripTime != null ? Math.round(remote.roundTripTime * 1000) : null,
         lossPct: remote?.fractionLost != null ? Math.round(remote.fractionLost * 1000) / 10 : 0,
         availableKbps: available != null ? Math.round(available) : null,
+        layers: outs.length,
       });
     } catch {
       /* transport closing */
     }
   }
 
-  // ---- input devices ----
+  // ---------------------------------------------------------------- input devices
+
   async listAudioInputs(requestPermission: boolean): Promise<MediaDeviceInfo[]> {
     if (requestPermission) {
       try {

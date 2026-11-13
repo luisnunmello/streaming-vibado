@@ -1,3 +1,5 @@
+import type { Limits } from './models';
+
 export type Codec = 'h264' | 'vp8' | 'vp9' | 'av1';
 export type Priority = 'motion' | 'balanced' | 'detail';
 export type AudioMode = 'none' | 'system' | 'window';
@@ -17,6 +19,8 @@ export interface StreamSettings {
   audioMode: AudioMode;
   /** Extra audio input (microphone or virtual cable) mixed into the stream; '' = none. */
   audioDeviceId: string;
+  /** Send several quality levels so the server can lower quality for viewers instead of refusing them. */
+  adaptive: boolean;
 }
 
 export const DEFAULT_SETTINGS: StreamSettings = {
@@ -30,6 +34,7 @@ export const DEFAULT_SETTINGS: StreamSettings = {
   codec: 'h264',
   audioMode: 'system',
   audioDeviceId: '',
+  adaptive: false,
 };
 
 export interface Preset {
@@ -71,16 +76,46 @@ export interface StreamStats {
   rttMs: number | null;
   lossPct: number;
   availableKbps: number | null;
+  /** How many quality levels are being encoded. */
+  layers: number;
 }
 
 const KEY = 'streamSettings';
 
-export function loadSettings(): StreamSettings {
+export function loadSettings(defaults: Partial<StreamSettings> = {}): StreamSettings {
   try {
-    return { ...DEFAULT_SETTINGS, ...JSON.parse(localStorage.getItem(KEY) ?? '{}') };
+    return { ...DEFAULT_SETTINGS, ...defaults, ...JSON.parse(localStorage.getItem(KEY) ?? '{}') };
   } catch {
-    return { ...DEFAULT_SETTINGS };
+    return { ...DEFAULT_SETTINGS, ...defaults };
   }
+}
+
+/** Brings settings inside a guest's limits (the server enforces them too). */
+export function clampSettings(s: StreamSettings, limits: Limits | null): StreamSettings {
+  if (!limits) return s;
+  return {
+    ...s,
+    bitrateMbps: Math.min(s.bitrateMbps, limits.maxBitrateMbps),
+    fps: Math.min(s.fps, limits.maxFps),
+    height: s.height === 0 || s.height > limits.maxHeight ? limits.maxHeight : s.height,
+    audioMode: limits.allowAudio ? s.audioMode : 'none',
+    audioDeviceId: limits.allowAudio ? s.audioDeviceId : '',
+  };
+}
+
+export function fpsOptions(limits: Limits | null): number[] {
+  const base = [30, 60, 120];
+  if (!limits) return base;
+  const opts = base.filter((f) => f <= limits.maxFps);
+  if (!opts.includes(limits.maxFps)) opts.push(limits.maxFps);
+  return opts.sort((a, b) => a - b);
+}
+
+export function resolutionOptions(limits: Limits | null): { value: number; label: string }[] {
+  if (!limits) return RESOLUTIONS;
+  const opts = RESOLUTIONS.filter((r) => r.value !== 0 && r.value <= limits.maxHeight);
+  if (!opts.some((r) => r.value === limits.maxHeight)) opts.unshift({ value: limits.maxHeight, label: limits.maxHeight + 'p' });
+  return opts;
 }
 
 export function saveSettings(s: StreamSettings): void {

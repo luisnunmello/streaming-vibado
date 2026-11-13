@@ -12,30 +12,61 @@ export interface ViewerStats {
   lossPct: number;
 }
 
-/** Receives the live stream from the SFU. Anonymous: no login needed. */
+export type Quality = 'auto' | 'high' | 'medium' | 'low';
+export type ViewerProblem = 'notfound' | 'kicked' | 'busy' | 'other';
+
+/** Receives a room's live stream from the SFU. Anonymous: no login needed. */
 @Injectable({ providedIn: 'root' })
 export class ViewerService {
   private readonly sig = inject(SignalingService);
 
   readonly live = signal(false);
   readonly connecting = signal(true);
+  readonly roomName = signal<string | null>(null);
+  readonly ownerName = signal<string | null>(null);
   readonly error = signal<string | null>(null);
+  readonly problem = signal<ViewerProblem | null>(null);
   readonly hasAudio = signal(false);
   readonly stats = signal<ViewerStats | null>(null);
+  /** Quality levels the stream offers (1 = only one). */
+  readonly layers = signal(1);
+  readonly quality = signal<Quality>('auto');
   /** The element's srcObject; stays the same object for the whole session. */
   readonly stream = new MediaStream();
 
+  private slug = '';
+  private key: string | undefined;
   private device?: Device;
   private transport?: types.Transport;
   private consumers = new Map<string, types.Consumer>();
   private unsubs: Array<() => void> = [];
   private statsTimer?: ReturnType<typeof setInterval>;
   private retryTimer?: ReturnType<typeof setTimeout>;
+  private hideTimer?: ReturnType<typeof setTimeout>;
   private generation = 0;
+  private blocked = false;
+  private pausedSent = false;
   private last = { bytes: 0, at: 0, lost: 0, received: 0 };
 
-  start(): void {
+  private readonly onVisibility = () => {
+    clearTimeout(this.hideTimer);
+    if (document.hidden) {
+      // A tab nobody looks at should not keep receiving video: saves server bandwidth.
+      this.hideTimer = setTimeout(() => this.setPaused(true), 10_000);
+    } else {
+      this.setPaused(false);
+    }
+  };
+
+  start(slug: string, key?: string): void {
     this.stop();
+    this.slug = slug;
+    this.key = key;
+    this.blocked = false;
+    this.problem.set(null);
+    this.error.set(null);
+    this.roomName.set(null);
+    this.connecting.set(true);
     this.sig.open();
     this.unsubs.push(
       this.sig.on('connect', () => void this.setup()),
@@ -46,18 +77,47 @@ export class ViewerService {
       this.sig.on<{ live: boolean }>('streamState', (s) => this.live.set(s.live)),
       this.sig.on<{ producerId: string }>('newProducer', ({ producerId }) => void this.consume(producerId, this.generation)),
       this.sig.on<{ producerId: string }>('producerClosed', ({ producerId }) => this.removeByProducer(producerId)),
+      this.sig.on<{ reason: string }>('kicked', ({ reason }) => {
+        this.blocked = true;
+        clearTimeout(this.retryTimer);
+        this.teardown();
+        this.live.set(false);
+        this.connecting.set(false);
+        this.problem.set('kicked');
+        this.error.set(reason);
+      }),
     );
+    document.addEventListener('visibilitychange', this.onVisibility);
     this.statsTimer = setInterval(() => void this.collectStats(), 1000);
   }
 
   stop(): void {
     clearInterval(this.statsTimer);
     clearTimeout(this.retryTimer);
+    clearTimeout(this.hideTimer);
+    document.removeEventListener('visibilitychange', this.onVisibility);
     this.unsubs.forEach((u) => u());
     this.unsubs = [];
     this.teardown();
     this.sig.close();
     this.live.set(false);
+  }
+
+  /** Tries again after "kicked" or a connection problem. */
+  retry(): void {
+    if (this.slug) this.start(this.slug, this.key);
+  }
+
+  setQuality(q: Quality): void {
+    this.quality.set(q);
+    const video = [...this.consumers.values()].find((c) => c.kind === 'video');
+    if (video) this.sig.request('setQuality', { consumerId: video.id, quality: q }).catch(() => undefined);
+  }
+
+  private setPaused(paused: boolean): void {
+    if (this.pausedSent === paused || !this.transport) return;
+    this.pausedSent = paused;
+    this.sig.request('setPaused', { paused }).catch(() => undefined);
   }
 
   private teardown(): void {
@@ -68,15 +128,27 @@ export class ViewerService {
     this.transport = undefined;
     for (const t of this.stream.getTracks()) this.stream.removeTrack(t);
     this.hasAudio.set(false);
+    this.layers.set(1);
     this.stats.set(null);
+    this.pausedSent = false;
   }
 
   private async setup(): Promise<void> {
+    if (this.blocked) return;
     const gen = ++this.generation;
     try {
-      const { rtpCapabilities } = await this.sig.request<{ rtpCapabilities: types.RtpCapabilities }>('rtpCapabilities');
+      const joined = await this.sig.request<{
+        room: { name: string; ownerName: string };
+        live: boolean;
+        rtpCapabilities: types.RtpCapabilities;
+      }>('joinRoom', { slug: this.slug, key: this.key });
+      if (gen !== this.generation) return;
+      this.roomName.set(joined.room.name);
+      this.ownerName.set(joined.room.ownerName);
+      this.live.set(joined.live);
+
       const device = new Device();
-      await device.load({ routerRtpCapabilities: rtpCapabilities });
+      await device.load({ routerRtpCapabilities: joined.rtpCapabilities });
       const params = await this.sig.request<any>('createTransport', { direction: 'recv' });
       if (gen !== this.generation) return;
       const transport = device.createRecvTransport({
@@ -89,28 +161,40 @@ export class ViewerService {
         this.sig.request('connectTransport', { transportId: transport.id, dtlsParameters }).then(ok, fail);
       });
       transport.on('connectionstatechange', (state) => {
-        if (state === 'failed' && gen === this.generation) this.scheduleRetry();
+        if (state === 'failed' && gen === this.generation) this.scheduleRetry(2000);
       });
       this.device = device;
       this.transport = transport;
       this.error.set(null);
+      this.problem.set(null);
       this.connecting.set(false);
 
       const { producers } = await this.sig.request<{ producers: { id: string }[] }>('getProducers');
       for (const p of producers) await this.consume(p.id, gen);
     } catch (e: any) {
       if (gen !== this.generation) return;
-      this.error.set(e?.message ?? 'Could not connect');
-      this.scheduleRetry();
+      const message: string = e?.message ?? 'Could not connect';
+      this.connecting.set(false);
+      this.error.set(message);
+      if (/not found/i.test(message)) {
+        this.problem.set('notfound');
+        this.blocked = true; // pointless to retry
+      } else if (/full|too many|capacity/i.test(message)) {
+        this.problem.set('busy');
+        this.scheduleRetry(10_000);
+      } else {
+        this.problem.set('other');
+        this.scheduleRetry(4000);
+      }
     }
   }
 
-  private scheduleRetry(): void {
+  private scheduleRetry(ms: number): void {
     clearTimeout(this.retryTimer);
     this.retryTimer = setTimeout(() => {
       this.teardown();
-      if (this.sig.connected()) void this.setup();
-    }, 2000);
+      if (this.sig.connected() && !this.blocked) void this.setup();
+    }, ms);
   }
 
   private async consume(producerId: string, gen: number): Promise<void> {
@@ -133,9 +217,20 @@ export class ViewerService {
       this.consumers.set(consumer.id, consumer);
       this.stream.addTrack(consumer.track);
       if (consumer.kind === 'audio') this.hasAudio.set(true);
+      if (consumer.kind === 'video') {
+        this.layers.set(data.spatialLayers ?? 1);
+        if (this.quality() !== 'auto') this.sig.request('setQuality', { consumerId: consumer.id, quality: this.quality() }).catch(() => undefined);
+      }
       await this.sig.request('resumeConsumer', { consumerId: consumer.id });
+      this.error.set(null);
+      this.problem.set(null);
     } catch (e: any) {
-      this.error.set(e?.message ?? 'Could not play the stream');
+      const message: string = e?.message ?? 'Could not play the stream';
+      this.error.set(message);
+      if (/full|capacity/i.test(message)) {
+        this.problem.set('busy');
+        this.scheduleRetry(10_000);
+      }
     }
   }
 
@@ -146,6 +241,7 @@ export class ViewerService {
         c.close();
         this.consumers.delete(id);
         if (c.kind === 'audio') this.hasAudio.set(false);
+        if (c.kind === 'video') this.layers.set(1);
       }
     }
     if (this.consumers.size === 0) this.stats.set(null);
@@ -172,9 +268,7 @@ export class ViewerService {
         height: inbound.frameHeight ?? 0,
         fps: Math.round(inbound.framesPerSecond ?? 0),
         bitrateKbps: Math.max(0, Math.round(bitrateKbps)),
-        bufferMs: inbound.jitterBufferEmittedCount
-          ? Math.round((inbound.jitterBufferDelay / inbound.jitterBufferEmittedCount) * 1000)
-          : 0,
+        bufferMs: inbound.jitterBufferEmittedCount ? Math.round((inbound.jitterBufferDelay / inbound.jitterBufferEmittedCount) * 1000) : 0,
         lossPct: dLost + dRecv > 0 ? Math.round((Math.max(0, dLost) / (dLost + dRecv)) * 1000) / 10 : 0,
       });
     } catch {

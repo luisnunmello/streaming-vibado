@@ -1,75 +1,64 @@
-import { Injectable, signal } from '@angular/core';
-
-const KEY = 'adminToken';
-
-function readToken(): string | null {
-  try {
-    return localStorage.getItem(KEY);
-  } catch {
-    return null;
-  }
-}
+import { Injectable, computed, inject, signal } from '@angular/core';
+import { ApiError, ApiService } from './api.service';
+import type { Me } from './models';
 
 @Injectable({ providedIn: 'root' })
 export class AuthService {
-  readonly token = signal<string | null>(readToken());
+  private readonly api = inject(ApiService);
 
-  private async call(path: string, body?: unknown, auth = true): Promise<any> {
-    const headers: Record<string, string> = { 'content-type': 'application/json' };
-    const token = this.token();
-    if (auth && token) headers['authorization'] = `Bearer ${token}`;
-    const res = await fetch(path, {
-      method: body === undefined && path.endsWith('session') ? 'GET' : 'POST',
-      headers,
-      body: body === undefined ? undefined : JSON.stringify(body),
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw Object.assign(new Error(data.error ?? `Request failed (${res.status})`), { status: res.status });
-    return data;
+  readonly me = signal<Me | null>(null);
+  readonly isAdmin = computed(() => this.me()?.role === 'admin');
+  readonly isGuest = computed(() => this.me()?.role === 'guest');
+  private loading?: Promise<void>;
+
+  /** Loads the current user once (from the stored token). */
+  ensureLoaded(): Promise<void> {
+    this.loading ??= this.refresh();
+    return this.loading;
   }
 
-  private setToken(token: string | null) {
-    this.token.set(token);
+  async refresh(): Promise<void> {
+    if (!this.api.token()) {
+      this.me.set(null);
+      return;
+    }
     try {
-      if (token) localStorage.setItem(KEY, token);
-      else localStorage.removeItem(KEY);
-    } catch {
-      /* storage unavailable: the session just won't survive a reload */
+      this.me.set(await this.api.get<Me>('/api/me'));
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 401) this.api.setToken(null);
+      this.me.set(null);
     }
   }
 
-  async login(password: string): Promise<void> {
-    const { token } = await this.call('/api/admin/login', { password }, false);
-    this.setToken(token);
+  async login(name: string, password: string): Promise<void> {
+    const { token } = await this.api.post<{ token: string }>('/api/login', { name, password });
+    this.api.setToken(token);
+    await this.refresh();
   }
 
-  /** Checks a stored token against the server; clears it if it is no longer valid. */
-  async validate(): Promise<boolean> {
-    if (!this.token()) return false;
-    try {
-      await this.call('/api/admin/session');
-      return true;
-    } catch (e: any) {
-      if (e.status === 401) this.setToken(null);
-      return false;
-    }
+  async activate(key: string, password: string, name?: string): Promise<void> {
+    const { token } = await this.api.post<{ token: string }>('/api/activate', { key, password, name });
+    this.api.setToken(token);
+    await this.refresh();
   }
 
   async logout(): Promise<void> {
     try {
-      await this.call('/api/admin/logout', {});
+      await this.api.post('/api/logout');
     } catch {
       /* already invalid */
     }
-    this.setToken(null);
+    this.clear();
   }
 
-  /** Called when the server tells us the session was revoked (e.g. password changed elsewhere). */
-  expire(): void {
-    this.setToken(null);
+  /** The server ended this session (password changed elsewhere, account disabled…). */
+  clear(): void {
+    this.api.setToken(null);
+    this.me.set(null);
+    this.loading = Promise.resolve();
   }
 
-  changePassword(currentPassword: string, newPassword: string): Promise<void> {
-    return this.call('/api/admin/password', { currentPassword, newPassword });
+  changePassword(currentPassword: string, newPassword: string): Promise<unknown> {
+    return this.api.put('/api/me/password', { currentPassword, newPassword });
   }
 }

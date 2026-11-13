@@ -51,6 +51,7 @@
             <div><span>Round trip</span><b>{{ st.rttMs ?? '–' }}{{ st.rttMs != null ? ' ms' : '' }}</b></div>
             <div><span>Est. bandwidth</span><b>{{ st.availableKbps != null ? (st.availableKbps / 1000).toFixed(1) + ' Mbps' : '–' }}</b></div>
             <div><span>Source</span><b>{{ s.source()?.width }}×{{ s.source()?.height }}</b></div>
+            <div><span>Quality levels</span><b>{{ st.layers }}</b></div>
           </div>
           @if (st.limitation === 'cpu') {
             <p class="notice">The encoder cannot keep up. Lower the resolution or frame rate, or restart with H.264 (hardware).</p>
@@ -65,6 +66,18 @@
   </div>
 
   <div class="col">
+    @if (s.limits(); as l) {
+      <div class="card">
+        <h2>Your limits</h2>
+        <p class="hint limits">
+          Up to {{ l.maxHeight }}p at {{ l.maxFps }} fps and {{ l.maxBitrateMbps }} Mbps, {{ l.maxViewersPerRoom }} viewers
+          @if (l.maxStreamMinutes) {
+            , {{ l.maxStreamMinutes }} min per stream
+          }
+        </p>
+      </div>
+    }
+
     <div class="card">
       <h2>Video quality <small>live</small></h2>
       <div class="chips">
@@ -95,7 +108,7 @@
 
       <div class="field">
         <label for="bitrate">Bitrate <b>{{ settings().bitrateMbps }} Mbps</b></label>
-        <input id="bitrate" type="range" min="1" max="40" step="0.5" [value]="settings().bitrateMbps"
+        <input id="bitrate" type="range" [min]="maxBitrate < 1 ? 0.5 : 1" [max]="maxBitrate" step="0.5" [value]="settings().bitrateMbps"
                (input)="patch({ bitrateMbps: +$any($event.target).value })" />
         <span class="hint">Higher keeps fast motion clean but uses more upload (yours and the server's).</span>
       </div>
@@ -118,8 +131,17 @@
         }
       </div>
       <p class="hint">{{ codecHint() }}</p>
+      <label class="check adaptive">
+        <input type="checkbox" [checked]="settings().adaptive" [disabled]="busy()" (change)="patch({ adaptive: $any($event.target).checked })" />
+        <span>Adaptive quality <small>applies on next start</small></span>
+      </label>
+      <p class="hint">
+        Sends three quality levels. When the server is busy, or a viewer picks a lower quality, they get a smaller picture instead of being
+        refused. Uses more CPU on your side.
+      </p>
     </div>
 
+    @if (s.limits()?.allowAudio !== false) {
     <div class="card">
       <h2>Audio</h2>
       <div class="field">
@@ -174,5 +196,6 @@
         </ol>
       </details>
     </div>
+    }
   </div>
 </div>

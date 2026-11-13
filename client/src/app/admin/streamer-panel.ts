@@ -3,11 +3,13 @@ import { StreamerService } from '../core/streamer.service';
 import {
   CODECS,
   PRESETS,
-  RESOLUTIONS,
   type AudioMode,
   type Preset,
   type StreamSettings,
+  clampSettings,
+  fpsOptions,
   loadSettings,
+  resolutionOptions,
   saveSettings,
 } from '../core/stream-settings';
 
@@ -18,12 +20,13 @@ import {
 })
 export class StreamerPanel implements OnInit, OnDestroy {
   protected readonly s = inject(StreamerService);
-  protected readonly settings = signal<StreamSettings>(loadSettings());
+  protected readonly settings = signal<StreamSettings>(clampSettings(loadSettings({ adaptive: !!this.s.limits() }), this.s.limits()));
   protected readonly devices = signal<MediaDeviceInfo[]>([]);
-  protected readonly presets = PRESETS;
-  protected readonly resolutions = RESOLUTIONS;
+  protected readonly presets = this.distinctPresets();
+  protected readonly resolutions = resolutionOptions(this.s.limits());
+  protected readonly maxBitrate = this.s.limits()?.maxBitrateMbps ?? 40;
   protected readonly codecs = CODECS;
-  protected readonly fpsOptions = [30, 60, 120];
+  protected readonly fpsOptions = fpsOptions(this.s.limits());
   protected readonly audioModes: { value: AudioMode; label: string; hint: string }[] = [
     { value: 'none', label: 'No screen audio', hint: 'Nothing from the screen is sent.' },
     { value: 'system', label: 'Everything', hint: 'All sound from the shared screen (or tab).' },
@@ -70,12 +73,27 @@ export class StreamerPanel implements OnInit, OnDestroy {
   }
 
   protected applyPreset(p: Preset): void {
-    this.patch(p.values);
+    this.settings.update((cur) => clampSettings({ ...cur, ...p.values }, this.s.limits()));
   }
 
   protected isPreset(p: Preset): boolean {
     const cur = this.settings() as unknown as Record<string, unknown>;
-    return Object.entries(p.values).every(([k, v]) => cur[k] === v);
+    const want = clampSettings({ ...this.settings(), ...p.values }, this.s.limits()) as unknown as Record<string, unknown>;
+    return Object.keys(p.values).every((k) => cur[k] === want[k]);
+  }
+
+  /** Within an account's limits several presets collapse into the same thing: show each result once. */
+  private distinctPresets(): Preset[] {
+    const limits = this.s.limits();
+    if (!limits) return PRESETS;
+    const seen = new Set<string>();
+    return PRESETS.filter((p) => {
+      const c = clampSettings({ ...loadSettings(), ...p.values }, limits);
+      const id = [c.height, c.fps, c.bitrateMbps, c.priority].join();
+      if (seen.has(id)) return false;
+      seen.add(id);
+      return true;
+    });
   }
 
   protected async refreshDevices(askPermission: boolean): Promise<void> {

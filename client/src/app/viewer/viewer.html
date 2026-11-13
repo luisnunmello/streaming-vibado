@@ -1,18 +1,40 @@
 <div class="stage" #stage (mousemove)="poke()" (touchstart)="poke()" [class.idle]="!controlsVisible() && v.live()">
   <video #video autoplay playsinline muted (dblclick)="toggleFullscreen()"></video>
 
+  <div class="top">
+    <a routerLink="/lobbies" class="back" aria-label="Back to lobbies">← Lobbies</a>
+    @if (v.roomName(); as name) {
+      <span class="title">{{ name }}<small> · {{ v.ownerName() }}</small></span>
+    }
+  </div>
+
   @if (!v.live()) {
     <div class="overlay">
-      @if (v.connecting()) {
+      @if (v.problem() === 'notfound') {
+        <div class="dot bad"></div>
+        <h1>Room not found</h1>
+        <p>This room doesn't exist, or the link is no longer valid.</p>
+        <a routerLink="/lobbies" class="btn">Browse public rooms</a>
+      } @else if (v.problem() === 'kicked') {
+        <div class="dot bad"></div>
+        <h1>You were removed from the room</h1>
+        <p>{{ v.error() }}</p>
+        <a routerLink="/lobbies" class="btn">Browse public rooms</a>
+      } @else if (v.problem() === 'busy') {
+        <div class="spinner"></div>
+        <h1>Can't join right now</h1>
+        <p>{{ v.error() }}</p>
+        <p class="hint">Trying again automatically…</p>
+      } @else if (v.connecting()) {
         <div class="spinner"></div>
         <p>Connecting…</p>
       } @else {
         <div class="dot"></div>
         <h1>Stream is offline</h1>
         <p>It will start playing automatically when the broadcast begins.</p>
-      }
-      @if (v.error(); as err) {
-        <p class="err">{{ err }}</p>
+        @if (v.error(); as err) {
+          <p class="err">{{ err }}</p>
+        }
       }
     </div>
   } @else if (needsUnmute()) {
@@ -20,6 +42,10 @@
       <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="currentColor" d="M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0 0 14 7.97v8.05A4.5 4.5 0 0 0 16.5 12zM14 3.23v2.06a7 7 0 0 1 0 13.42v2.06a9 9 0 0 0 0-17.54z"/></svg>
       Click to unmute
     </button>
+  }
+
+  @if (v.live() && v.error(); as err) {
+    <div class="toast">{{ err }}</div>
   }
 
   @if (v.live() && showStats() && v.stats(); as st) {
@@ -34,6 +60,16 @@
       <span class="live"><i></i>LIVE</span>
     }
     <span class="spacer"></span>
+    @if (v.layers() > 1) {
+      <label class="quality">
+        <span>Quality</span>
+        <select [value]="v.quality()" (change)="v.setQuality($any($event.target).value)" aria-label="Video quality">
+          @for (q of qualities; track q.value) {
+            <option [value]="q.value" [selected]="q.value === v.quality()">{{ q.label }}</option>
+          }
+        </select>
+      </label>
+    }
     @if (v.hasAudio()) {
       <button type="button" class="icon" (click)="toggleMute()" [attr.aria-label]="muted() ? 'Unmute' : 'Mute'">
         @if (muted() || volume() === 0) {

@@ -1,14 +1,18 @@
 import { Component, ElementRef, OnDestroy, OnInit, computed, inject, signal, viewChild } from '@angular/core';
-import { ViewerService } from '../core/viewer.service';
+import { ActivatedRoute, RouterLink } from '@angular/router';
+import { Subscription, combineLatest } from 'rxjs';
+import { ViewerService, type Quality } from '../core/viewer.service';
 
 @Component({
   selector: 'app-viewer',
+  imports: [RouterLink],
   templateUrl: './viewer.html',
   styleUrl: './viewer.scss',
   host: { '(document:fullscreenchange)': 'onFullscreenChange()' },
 })
 export class Viewer implements OnInit, OnDestroy {
   protected readonly v = inject(ViewerService);
+  private readonly route = inject(ActivatedRoute);
   private readonly video = viewChild.required<ElementRef<HTMLVideoElement>>('video');
   private readonly stage = viewChild.required<ElementRef<HTMLElement>>('stage');
 
@@ -18,10 +22,19 @@ export class Viewer implements OnInit, OnDestroy {
   protected readonly fullscreen = signal(false);
   protected readonly controlsVisible = signal(true);
   protected readonly needsUnmute = computed(() => this.muted() && this.v.hasAudio());
+  protected readonly qualities: { value: Quality; label: string }[] = [
+    { value: 'auto', label: 'Auto' },
+    { value: 'high', label: 'High' },
+    { value: 'medium', label: 'Medium' },
+    { value: 'low', label: 'Low' },
+  ];
   private hideTimer?: ReturnType<typeof setTimeout>;
+  private sub?: Subscription;
 
   ngOnInit(): void {
-    this.v.start();
+    this.sub = combineLatest([this.route.paramMap, this.route.queryParamMap]).subscribe(([params, query]) => {
+      this.v.start(params.get('slug') ?? '', query.get('key') ?? undefined);
+    });
     queueMicrotask(() => {
       const el = this.video().nativeElement;
       el.srcObject = this.v.stream;
@@ -31,6 +44,7 @@ export class Viewer implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     clearTimeout(this.hideTimer);
+    this.sub?.unsubscribe();
     this.v.stop();
   }
 
