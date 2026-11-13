@@ -18,6 +18,8 @@
   z-index: 2;
 
   .back {
+    flex: 0 0 auto;
+    white-space: nowrap;
     color: #fff;
     text-decoration: none;
     font-size: 0.9rem;
@@ -29,6 +31,7 @@
     }
   }
   .title {
+    flex: 1 1 0;
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -279,6 +282,8 @@ video {
 }
 
 .ownerbtn {
+  flex: 0 0 auto;
+  white-space: nowrap;
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
@@ -343,6 +348,13 @@ video {
 @media (max-width: 560px) {
   .top {
     gap: 0.5rem;
+  }
+  /* the settings icon is enough: the label would squeeze the title and wrap */
+  .ownerbtn .lbl {
+    display: none;
+  }
+  .ownerbtn {
+    padding: 0.4rem;
   }
   .bar {
     gap: 0.4rem;
