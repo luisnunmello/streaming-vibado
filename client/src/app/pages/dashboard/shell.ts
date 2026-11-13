@@ -25,7 +25,9 @@ import { StreamerService } from '../../core/streamer.service';
           <a routerLink="/dashboard/presets" routerLinkActive="on">{{ 'Presets' | t }}</a>
           <a routerLink="/dashboard/bandwidth" routerLinkActive="on">{{ 'Bandwidth' | t }}</a>
         }
-        <a routerLink="/dashboard/account" routerLinkActive="on">{{ 'Account' | t }}</a>
+        @if (auth.me()) {
+          <a routerLink="/dashboard/account" routerLinkActive="on">{{ 'Account' | t }}</a>
+        }
       </nav>
       <span class="spacer"></span>
       @if (streamer.state() === 'live' && streamer.room(); as room) {
@@ -33,13 +35,17 @@ import { StreamerService } from '../../core/streamer.service';
           <i></i> {{ 'LIVE' | t }} · {{ liveRoomTitle(room.name) }}
         </a>
       }
-      @if (!auth.me()?.restricted) {
+      @if (auth.me() && !auth.me()?.restricted) {
         <button type="button" class="btn small primary" [disabled]="sharing" (click)="share()" [title]="'Go straight to your studio and pick a screen to share' | t">{{ 'Share screen' | t }}</button>
       }
-      <a routerLink="/lobbies" class="link">{{ 'Public rooms' | t }}</a>
       <app-lang-switch />
-      <span class="who">{{ auth.me()?.name }} <span class="badge">{{ auth.me()?.role | t }}</span></span>
-      <button type="button" class="btn small" (click)="logout()">{{ 'Sign out' | t }}</button>
+      @if (auth.me()) {
+        <span class="who">{{ auth.me()?.name }} <span class="badge">{{ auth.me()?.role | t }}</span></span>
+        <button type="button" class="btn small" (click)="logout()">{{ 'Sign out' | t }}</button>
+      } @else {
+        <a routerLink="/activate" class="link">{{ 'Have a key?' | t }}</a>
+        <a routerLink="/login" class="btn small primary">{{ 'Sign in' | t }}</a>
+      }
     </header>
     @if (auth.adminBackup()) {
       <div class="usingbar" role="status">
@@ -205,6 +211,8 @@ export class Shell implements OnInit, OnDestroy {
     // Keeps limits and referral counts current on every page, and notices a session the server ended
     // (account disabled, password changed elsewhere). The studio gets limit changes instantly over its socket.
     this.timer = setInterval(async () => {
+      const wasSignedIn = !!this.auth.me();
+      if (!wasSignedIn) return; // visitors have nothing to refresh
       await this.auth.refresh();
       if (!this.auth.me()) await this.router.navigate(['/login']);
     }, 15_000);

@@ -11,7 +11,7 @@ import { LangSwitch } from './lang-switch';
     <header>
       <a routerLink="/" class="brand">{{ 'Streaming' | t }}</a>
       <nav>
-        <a routerLink="/lobbies">{{ 'Public rooms' | t }}</a>
+        <a routerLink="/dashboard/rooms">{{ 'Public rooms' | t }}</a>
       </nav>
       <span class="spacer"></span>
       <app-lang-switch />

@@ -3,15 +3,11 @@ import { I18nService, TPipe } from '../core/i18n.service';
 import { RouterLink } from '@angular/router';
 import { ApiService } from '../core/api.service';
 import type { LobbyRoom } from '../core/models';
-import { Topbar } from '../shared/topbar';
 
 @Component({
-  selector: 'app-lobbies',
-  imports: [RouterLink, Topbar, TPipe],
+  selector: 'app-public-rooms',
+  imports: [RouterLink, TPipe],
   template: `
-    <app-topbar />
-    <main class="page">
-      <h1 class="page-title">{{ 'Public rooms' | t }}</h1>
       @if (error()) {
         <p class="error">{{ error() | t }}</p>
       }
@@ -39,7 +35,6 @@ import { Topbar } from '../shared/topbar';
           </a>
         }
       </div>
-    </main>
   `,
   styles: `
     .grid {
@@ -73,7 +68,7 @@ import { Topbar } from '../shared/topbar';
     }
   `,
 })
-export class Lobbies implements OnInit, OnDestroy {
+export class PublicRooms implements OnInit, OnDestroy {
   private readonly api = inject(ApiService);
   protected readonly i18n = inject(I18nService);
   protected readonly rooms = signal<LobbyRoom[]>([]);

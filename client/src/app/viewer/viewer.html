@@ -2,7 +2,7 @@
   <video #video autoplay playsinline muted (dblclick)="toggleFullscreen()"></video>
 
   <div class="top">
-    <a routerLink="/lobbies" class="back" [attr.aria-label]="'Back to lobbies' | t">{{ '← Lobbies' | t }}</a>
+    <a routerLink="/dashboard/rooms" class="back" [attr.aria-label]="'Back to rooms' | t">{{ '← Rooms' | t }}</a>
     @if (v.roomName(); as name) {
       <span class="title">{{ i18n.roomName({ name: name, ownerName: v.ownerName(), autoName: v.autoName() }) }}<small> · {{ v.ownerName() }}</small></span>
     }
@@ -39,12 +39,12 @@
         <div class="dot bad"></div>
         <h1>{{ 'Room not found' | t }}</h1>
         <p>{{ "This room doesn't exist, or the link is no longer valid." | t }}</p>
-        <a routerLink="/lobbies" class="btn">{{ 'Browse public rooms' | t }}</a>
+        <a routerLink="/dashboard/rooms" class="btn">{{ 'Browse public rooms' | t }}</a>
       } @else if (v.problem() === 'kicked') {
         <div class="dot bad"></div>
         <h1>{{ 'You were removed from the room' | t }}</h1>
         <p>{{ v.error() | t }}</p>
-        <a routerLink="/lobbies" class="btn">{{ 'Browse public rooms' | t }}</a>
+        <a routerLink="/dashboard/rooms" class="btn">{{ 'Browse public rooms' | t }}</a>
       } @else if (v.problem() === 'busy') {
         <div class="spinner"></div>
         <h1>{{ "Can't join right now" | t }}</h1>

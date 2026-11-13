@@ -7,12 +7,17 @@ import { AuthService } from '../../core/auth.service';
 import type { RoomView } from '../../core/models';
 import { I18nService, TPipe } from '../../core/i18n.service';
 import { ShareService } from '../../core/share.service';
+import { PublicRooms } from '../../shared/public-rooms';
 import { absoluteUrl, copyText } from '../../core/util';
 
 @Component({
   selector: 'app-rooms',
-  imports: [FormsModule, RouterLink, TPipe],
+  imports: [FormsModule, RouterLink, TPipe, PublicRooms],
   template: `
+    @if (!auth.me()) {
+      <h1 class="page-title">{{ 'Public rooms' | t }}</h1>
+      <app-public-rooms />
+    } @else {
     <div class="head">
       <h1 class="page-title">{{ 'Rooms' | t }}</h1>
       <button type="button" class="btn primary" [disabled]="sharing()" (click)="share()">{{ 'Share screen' | t }}</button>
@@ -127,6 +132,10 @@ import { absoluteUrl, copyText } from '../../core/util';
         </table>
       </div>
     </div>
+
+    <h2 class="section">{{ 'Public rooms' | t }}</h2>
+    <app-public-rooms />
+    }
   `,
   styles: `
     .head {
@@ -135,6 +144,10 @@ import { absoluteUrl, copyText } from '../../core/util';
       justify-content: space-between;
       gap: 1rem;
       flex-wrap: wrap;
+    }
+    .section {
+      margin: 1.6rem 0 0.8rem;
+      font-size: 1.1rem;
     }
     .autoname {
       flex: 1;
@@ -260,6 +273,7 @@ export class Rooms implements OnInit, OnDestroy {
   });
 
   ngOnInit(): void {
+    if (!this.auth.me()) return; // visitors only see the public rooms
     void this.load();
     this.timer = setInterval(() => void this.load(), 5000);
     this.newVisibility = this.canPublic() ? 'public' : 'private';
@@ -280,6 +294,7 @@ export class Rooms implements OnInit, OnDestroy {
   }
 
   private async load(): Promise<void> {
+    if (!this.auth.me()) return;
     try {
       this.rooms.set((await this.api.get<{ rooms: RoomView[] }>('/api/rooms')).rooms);
     } catch (e: any) {
