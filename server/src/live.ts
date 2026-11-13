@@ -307,6 +307,7 @@ export class LiveService {
       if ([...rt.producers.values()].some((p) => p.kind === kind)) throw new ClientError(`This room already has a ${kind} stream`);
       const user = rt.room.ownerId === null ? null : getUser(rt.room.ownerId);
       if (rt.room.ownerId !== null && user?.status !== 'active') throw new ClientError('Account disabled');
+      if (rt.room.ownerId !== null && user?.restricted) throw new ClientError('Your account is restricted');
       if (kind === 'audio' && user && !user.limits.allowAudio) throw new ClientError('Audio is not allowed for your account');
       if (kind === 'video') this.checkCanStart(rt, user?.limits ?? null, user?.id ?? null);
 
@@ -417,7 +418,7 @@ export class LiveService {
     const owner = !!room && !!p && ((p.role === 'admin' && room.ownerId === null) || (p.role === 'user' && p.userId === room.ownerId));
     const ownerUser = room?.ownerId != null ? getUser(room.ownerId) : undefined;
 
-    let allowed = !!room && (room.ownerId === null || ownerUser?.status === 'active');
+    let allowed = !!room && (room.ownerId === null || ownerUser?.status === 'active' && !ownerUser.restricted);
     if (room && allowed && !owner && room.visibility === 'private') {
       const given = Buffer.from(typeof d.key === 'string' ? d.key : '');
       const real = Buffer.from(room.secret);

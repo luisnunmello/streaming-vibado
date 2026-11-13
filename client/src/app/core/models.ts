@@ -20,6 +20,9 @@ export interface Me {
   referrals?: { quota: number; used: number };
   monthBytes?: number;
   invitedByName?: string | null;
+  /** Can sign in but may not use the service. */
+  restricted?: boolean;
+  restrictedReason?: string;
 }
 
 export interface RoomView {
@@ -57,6 +60,8 @@ export interface UserView {
   referralsUsed: number;
   invitedById: number | null;
   invitedByName: string | null;
+  restricted: boolean;
+  restrictedReason: string;
   createdAt: number;
   activatedAt: number | null;
   lastSeen: number | null;

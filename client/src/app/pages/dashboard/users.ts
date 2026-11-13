@@ -116,6 +116,9 @@ const CUSTOM = 'custom';
                 <td class="chk"><input type="checkbox" [attr.aria-label]="'Select ' + u.name" [checked]="selected().has(u.id)" (change)="toggleOne(u.id, $any($event.target).checked)" /></td>
                 <td><b>{{ u.name }}</b></td>
                 <td>
+                  @if (u.restricted) {
+                    <span class="badge bad" [title]="u.restrictedReason">restricted</span>
+                  }
                   <span class="badge" [class.good]="u.status === 'active'" [class.warn]="u.status === 'pending'" [class.bad]="u.status === 'disabled'">{{ u.status }}</span>
                 </td>
                 <td>
@@ -161,6 +164,26 @@ const CUSTOM = 'custom';
                       @if (editLimits(); as l) {
                         <app-limits-editor [limits]="l" (limitsChange)="editUser($event)" />
                       }
+                      @if (u.restricted) {
+                        <div class="restrictbox">
+                          <p><b>Restricted:</b> {{ u.restrictedReason }}</p>
+                          <label class="check"><input type="checkbox" [checked]="optChildren()" (change)="optChildren.set($any($event.target).checked)" /> Also lift it for everyone they referred (and the people those referred…)</label>
+                          <label class="check"><input type="checkbox" [checked]="optParents()" (change)="optParents.set($any($event.target).checked)" /> Also lift it for who referred them (and above)</label>
+                          <button type="button" class="btn small" (click)="unrestrict(u)">Lift restriction</button>
+                        </div>
+                      } @else {
+                        <details class="restrictbox">
+                          <summary>Restrict access…</summary>
+                          <p class="muted hint">The user can still sign in, but sees a red warning with your reason and cannot use the website. Running streams stop and their rooms are hidden.</p>
+                          <div class="field">
+                            <label [for]="'rs' + u.id">Reason (shown to them)</label>
+                            <textarea [id]="'rs' + u.id" rows="2" maxlength="500" [value]="restrictReason()" (input)="restrictReason.set($any($event.target).value)"></textarea>
+                          </div>
+                          <label class="check"><input type="checkbox" [checked]="optChildren()" (change)="optChildren.set($any($event.target).checked)" /> Also restrict everyone they referred (and the people those referred…)</label>
+                          <label class="check"><input type="checkbox" [checked]="optParents()" (change)="optParents.set($any($event.target).checked)" /> Also restrict who referred them (and above)</label>
+                          <button type="button" class="btn small danger" (click)="restrict(u)">Restrict access</button>
+                        </details>
+                      }
                       @if (u.invitedByName) {
                         <p class="muted hint">Referred by {{ u.invitedByName }}, so these limits can never go above theirs.</p>
                       }
@@ -188,6 +211,26 @@ const CUSTOM = 'custom';
     </div>
   `,
   styles: `
+    .restrictbox {
+      margin: 0.8rem 0;
+      padding: 0.7rem 0.9rem;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      display: grid;
+      gap: 0.5rem;
+      justify-items: start;
+      summary {
+        cursor: pointer;
+        color: #ff8b82;
+      }
+      p {
+        margin: 0;
+      }
+      textarea {
+        width: 100%;
+        min-width: 280px;
+      }
+    }
     .chk {
       width: 2rem;
     }
@@ -236,6 +279,9 @@ export class Users implements OnInit, OnDestroy {
   protected readonly editChoice = signal('');
   protected readonly editLimits = signal<Limits | null>(null);
   protected readonly editQuota = signal(0);
+  protected readonly restrictReason = signal('');
+  protected readonly optChildren = signal(true);
+  protected readonly optParents = signal(false);
   protected readonly selected = signal<ReadonlySet<number>>(new Set());
   protected readonly emptySet: ReadonlySet<number> = new Set();
   protected readonly bulkChoice = signal('');
@@ -382,6 +428,9 @@ export class Users implements OnInit, OnDestroy {
       return;
     }
     this.editing.set(u);
+    this.restrictReason.set('');
+    this.optChildren.set(true);
+    this.optParents.set(false);
     this.editChoice.set(u.presetId ? '' + u.presetId : CUSTOM);
     this.editLimits.set({ ...u.limits });
     this.editQuota.set(u.referralQuota);
@@ -401,6 +450,25 @@ export class Users implements OnInit, OnDestroy {
       await this.api.patch(`/api/admin/users/${u.id}`, body);
       this.editing.set(null);
       await this.loadPresets();
+    });
+  }
+
+  protected restrict(u: UserView): Promise<void> {
+    const kids = this.optChildren();
+    const parents = this.optParents();
+    const what = `${u.name}${kids ? ' and everyone they referred' : ''}${parents ? ' and who referred them' : ''}`;
+    if (!confirm(`Restrict ${what}? Their streams stop right away.`)) return Promise.resolve();
+    return this.act(async () => {
+      await this.api.post(`/api/admin/users/${u.id}/restrict`, { reason: this.restrictReason().trim(), children: kids, parents });
+      this.restrictReason.set('');
+      this.editing.set(null);
+    });
+  }
+
+  protected unrestrict(u: UserView): Promise<void> {
+    return this.act(async () => {
+      await this.api.post(`/api/admin/users/${u.id}/unrestrict`, { children: this.optChildren(), parents: this.optParents() });
+      this.editing.set(null);
     });
   }
 

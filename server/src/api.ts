@@ -4,6 +4,7 @@ import {
   authenticate,
   changeOwnPassword,
   renameUser,
+  setRestriction,
   createUser,
   createReferral,
   deleteUser,
@@ -63,12 +64,22 @@ const bearer = (req: Request): string | undefined => {
 const principalOf = (res: Response): Principal => res.locals['principal'];
 const tokenOf = (res: Response): string => res.locals['token'];
 
+/** What a restricted user may still do: see who they are (and why), change their login, sign out. */
+const RESTRICTED_OK = new Set(['/me', '/me/name', '/me/password', '/logout']);
+
 function requireAuth(req: Request, res: Response, next: NextFunction): void {
   const token = bearer(req);
   const principal = getSession(token);
   if (!principal) {
     res.status(401).json({ error: 'Unauthorized' });
     return;
+  }
+  if (principal.role === 'user' && !RESTRICTED_OK.has(req.path)) {
+    const u = getUser(principal.userId!);
+    if (u?.restricted) {
+      res.status(403).json({ error: u.restrictedReason || 'Your account is restricted', restricted: true });
+      return;
+    }
   }
   res.locals['principal'] = principal;
   res.locals['token'] = token;
@@ -124,6 +135,8 @@ export function buildApi(live: LiveService, budget: BudgetManager): Router {
     id: g.id,
     name: g.name,
     status: g.status,
+    restricted: g.restricted,
+    restrictedReason: g.restrictedReason,
     limits: g.limits,
     presetId: g.presetId,
     presetName: g.presetName,
@@ -173,7 +186,7 @@ export function buildApi(live: LiveService, budget: BudgetManager): Router {
       const room = getRoomBySlug(String(req.params['slug']));
       const owner = room?.ownerId != null ? getUser(room.ownerId) : undefined;
       const key = typeof req.query['key'] === 'string' ? req.query['key'] : '';
-      const visible = !!room && (room.ownerId === null || owner?.status === 'active') && (room.visibility === 'public' || key === room.secret);
+      const visible = !!room && (room.ownerId === null || (owner?.status === 'active' && !owner.restricted)) && (room.visibility === 'public' || key === room.secret);
       if (!room || !visible) throw new HttpError(404, 'Room not found');
       // `mine`: the caller is signed in and owns this room (the admin owns the main room), so the viewer page can offer streamer controls.
       const caller = getSession(bearer(req));
@@ -264,6 +277,8 @@ export function buildApi(live: LiveService, budget: BudgetManager): Router {
         role: 'user',
         userId: g.id,
         name: g.name,
+        restricted: g.restricted,
+        restrictedReason: g.restrictedReason,
         limits: g.limits,
         referrals: { quota: g.referralQuota, used: referralsUsed(g.id) },
         monthBytes: monthlyBytes(g.id),
@@ -447,6 +462,57 @@ export function buildApi(live: LiveService, budget: BudgetManager): Router {
         }
       }
       res.json({ user: userView(getUser(user.id)!) });
+    }),
+  );
+
+  /** Everyone above `id` in the invitation chain, nearest first. */
+  const ancestors = (id: number): number[] => {
+    const out: number[] = [];
+    for (let u = getUser(id); u?.invitedBy; u = getUser(u.invitedBy)) out.push(u.invitedBy);
+    return out;
+  };
+
+  api.post(
+    '/admin/users/:id/restrict',
+    requireAdmin,
+    wrap((req, res) => {
+      const id = idParam(req);
+      const user = getUser(id);
+      if (!user) throw new HttpError(404, 'User not found');
+      const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim().slice(0, 500) : '';
+      const withChildren = req.body?.children !== false; // on unless explicitly turned off
+      const withParents = req.body?.parents === true;
+      const targets = new Map<number, string>([[id, reason || 'The administrator restricted your account.']]);
+      if (withChildren) {
+        for (const c of subtree(id).slice(1)) {
+          targets.set(c, `Your referrer ${user.name} was restricted${reason ? ': ' + reason : '.'}`);
+        }
+      }
+      if (withParents) {
+        for (const p of ancestors(id)) {
+          targets.set(p, `${user.name}, someone you referred, was restricted${reason ? ': ' + reason : '.'}`);
+        }
+      }
+      for (const [uid, why] of targets) {
+        setRestriction(uid, true, why);
+        for (const r of listRooms(uid)) live.closeRoom(r.id, 'This account is restricted');
+        live.refreshLimits(uid);
+      }
+      res.json({ restricted: [...targets.keys()], users: listUsers().map(userView) });
+    }),
+  );
+
+  api.post(
+    '/admin/users/:id/unrestrict',
+    requireAdmin,
+    wrap((req, res) => {
+      const id = idParam(req);
+      if (!getUser(id)) throw new HttpError(404, 'User not found');
+      const ids = new Set<number>([id]);
+      if (req.body?.children !== false) for (const c of subtree(id)) ids.add(c);
+      if (req.body?.parents === true) for (const p of ancestors(id)) ids.add(p);
+      for (const uid of ids) setRestriction(uid, false);
+      res.json({ lifted: [...ids], users: listUsers().map(userView) });
     }),
   );
 

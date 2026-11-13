@@ -25,6 +25,9 @@ export interface User {
   createdAt: number;
   activatedAt: number | null;
   lastSeen: number | null;
+  /** Can sign in, but may not use the service; `restrictedReason` is shown to them. */
+  restricted: boolean;
+  restrictedReason: string;
 }
 
 interface UserRow {
@@ -39,6 +42,8 @@ interface UserRow {
   created_at: number;
   activated_at: number | null;
   last_seen: number | null;
+  restricted: number;
+  restricted_reason: string;
 }
 
 interface KeyRow {
@@ -83,6 +88,8 @@ const toUser = (r: UserRow): User => {
     createdAt: r.created_at,
     activatedAt: r.activated_at,
     lastSeen: r.last_seen,
+    restricted: r.restricted === 1,
+    restrictedReason: r.restricted_reason,
   };
 };
 
@@ -101,6 +108,13 @@ export function validateName(name: unknown): string {
   }
   if (/^admin/i.test(n)) throw new HttpError(400, 'That name is reserved');
   return n;
+}
+
+/** True when the user may use the service (active and not restricted). */
+export const canUse = (u: User | undefined | null): boolean => !!u && u.status === 'active' && !u.restricted;
+
+export function setRestriction(id: number, restricted: boolean, reason = ''): void {
+  run('UPDATE users SET restricted = ?, restricted_reason = ? WHERE id = ?', restricted ? 1 : 0, restricted ? reason : '', id);
 }
 
 /** A user changes their own name (it is also the name they sign in with). */

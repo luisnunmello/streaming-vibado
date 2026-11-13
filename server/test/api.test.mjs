@@ -475,3 +475,48 @@ describe('public rooms only exist while their owner is online', () => {
     second.socket.close();
   });
 });
+
+describe('restricting users', () => {
+  it('restricts with children (default) and parents, shows the reason, and can be reverted', async () => {
+    const admin = await login('admin', 'new-master-pass-1');
+    const mk = async (name) => {
+      const r = await api('POST', '/api/admin/users', { token: admin, body: { name, referralQuota: 2 } });
+      const a = await api('POST', '/api/activate', { body: { key: r.key, password: name + '-password-1' } });
+      return { id: r.user.id, token: a.token };
+    };
+    const parent = await mk('rparent');
+    const mid = await mk('rmid');
+    // mid invites a child with a referral key
+    const ref = await api('POST', '/api/me/referrals', { token: mid.token });
+    const child = await api('POST', '/api/activate', { body: { key: ref.key, password: 'rchild-password-1', name: 'rchild' } });
+    const childId = (await api('GET', '/api/me', { token: child.token })).userId;
+    const room = await api('POST', '/api/rooms', { token: mid.token, body: { name: 'Mid room', visibility: 'public' } });
+    assert.equal(room.status, 201);
+
+    const res = await api('POST', `/api/admin/users/${mid.id}/restrict`, { token: admin, body: { reason: 'spamming' } });
+    assert.equal(res.status, 200);
+    assert.deepEqual([...res.restricted].sort(), [mid.id, childId].sort(), 'the parent is not touched by default');
+
+    // still signs in and sees the reason, but cannot use anything
+    const me = await api('GET', '/api/me', { token: mid.token });
+    assert.equal(me.restricted, true);
+    assert.equal(me.restrictedReason, 'spamming');
+    assert.match((await api('GET', '/api/me', { token: child.token })).restrictedReason, /rmid was restricted: spamming/);
+    const blocked = await api('POST', '/api/rooms', { token: mid.token, body: { name: 'Nope', visibility: 'private' } });
+    assert.equal(blocked.status, 403);
+    assert.equal(blocked.restricted, true);
+    assert.equal((await api('GET', `/api/rooms/${room.room.slug}/info`)).status, 404, 'their rooms are hidden');
+    assert.equal((await api('GET', '/api/me', { token: parent.token })).restricted, false);
+
+    // revert for the user and the people below
+    await api('POST', `/api/admin/users/${mid.id}/unrestrict`, { token: admin, body: {} });
+    assert.equal((await api('GET', '/api/me', { token: mid.token })).restricted, false);
+    assert.equal((await api('GET', '/api/me', { token: child.token })).restricted, false);
+    assert.equal((await api('POST', '/api/rooms', { token: mid.token, body: { name: 'Back', visibility: 'private' } })).status, 201);
+
+    // children off, parents on
+    const r2 = await api('POST', `/api/admin/users/${childId}/restrict`, { token: admin, body: { reason: 'x', children: false, parents: true } });
+    assert.deepEqual([...r2.restricted].sort(), [childId, mid.id].sort());
+    assert.match((await api('GET', '/api/me', { token: mid.token })).restrictedReason, /rchild, someone you referred, was restricted: x/);
+  });
+});

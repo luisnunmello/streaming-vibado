@@ -95,7 +95,7 @@ export function listPublicRooms(): (Room & { ownerName: string })[] {
   const rows = all<RoomRow & { owner_name: string | null; owner_status: string | null }>(
     `SELECT r.*, g.name AS owner_name, g.status AS owner_status
      FROM rooms r LEFT JOIN users g ON g.id = r.owner_id
-     WHERE r.visibility = 'public' AND (r.owner_id IS NULL OR g.status = 'active')
+     WHERE r.visibility = 'public' AND (r.owner_id IS NULL OR (g.status = 'active' AND g.restricted = 0))
      ORDER BY r.created_at`,
   );
   return rows.map((r) => ({ ...toRoom(r), ownerName: r.owner_name ?? 'Admin' }));

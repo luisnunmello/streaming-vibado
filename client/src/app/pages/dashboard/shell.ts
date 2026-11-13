@@ -1,11 +1,12 @@
 import { Component, OnDestroy, OnInit, inject } from '@angular/core';
 import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+import { Account } from './account';
 import { AuthService } from '../../core/auth.service';
 import { StreamerService } from '../../core/streamer.service';
 
 @Component({
   selector: 'app-shell',
-  imports: [RouterLink, RouterLinkActive, RouterOutlet],
+  imports: [RouterLink, RouterLinkActive, RouterOutlet, Account],
   template: `
     <header>
       <a routerLink="/" class="brand">Streaming</a>
@@ -32,10 +33,36 @@ import { StreamerService } from '../../core/streamer.service';
       <button type="button" class="btn small" (click)="logout()">Sign out</button>
     </header>
     <main class="page">
-      <router-outlet />
+      @if (auth.me()?.restricted) {
+        <div class="restricted" role="alert">
+          <b>Your account is restricted.</b> You cannot use this website right now.
+          <p>Reason: {{ auth.me()?.restrictedReason || 'No reason was given.' }}</p>
+          <p class="small">Contact the administrator if you think this is a mistake. You can still change your name and password and sign out.</p>
+        </div>
+        <app-account />
+      } @else {
+        <router-outlet />
+      }
     </main>
   `,
   styles: `
+    .restricted {
+      margin-bottom: 1rem;
+      padding: 1rem 1.2rem;
+      border-radius: 10px;
+      border: 1px solid #d92d20;
+      background: rgba(217, 45, 32, 0.15);
+      color: #ffb4ad;
+      font-size: 1.05rem;
+      p {
+        margin: 0.5rem 0 0;
+        color: #ffd5d1;
+      }
+      .small {
+        font-size: 0.85rem;
+        opacity: 0.85;
+      }
+    }
     header {
       display: flex;
       align-items: center;

@@ -121,6 +121,15 @@ if (version < 3) {
   `);
 }
 
+if (version < 4) {
+  // A restricted user can sign in but sees a warning and cannot use the service.
+  db.exec(`
+    ALTER TABLE users ADD COLUMN restricted INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE users ADD COLUMN restricted_reason TEXT NOT NULL DEFAULT '';
+    PRAGMA user_version = 4;
+  `);
+}
+
 export function all<T>(sql: string, ...params: SQLInputValue[]): T[] {
   return db.prepare(sql).all(...params) as T[];
 }
