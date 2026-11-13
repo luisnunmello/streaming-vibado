@@ -73,17 +73,49 @@ const CUSTOM = 'custom';
       </div>
     }
 
+    @if (selected().size > 0) {
+      <div class="card bulk">
+        <h2>{{ selected().size }} selected</h2>
+        <div class="row">
+          <div class="field narrow">
+            <label for="bpre">Apply limits</label>
+            <select id="bpre" [value]="bulkChoice()" (change)="chooseBulk($any($event.target).value)">
+              @for (p of presets(); track p.id) {
+                <option [value]="p.id" [selected]="bulkChoice() === '' + p.id">{{ p.name }}{{ p.isDefault ? ' (default)' : '' }}</option>
+              }
+              <option [value]="custom" [selected]="bulkChoice() === custom">Custom…</option>
+            </select>
+          </div>
+        </div>
+        @if (bulkChoice() === custom) {
+          @if (bulkLimits(); as l) {
+            <app-limits-editor [limits]="l" (limitsChange)="bulkLimits.set($event)" />
+          }
+        } @else if (presetOf(bulkChoice()); as p) {
+          <p class="muted hint">{{ describe(p.limits) }}. The selected users will follow <b>{{ p.name }}</b> from now on.</p>
+        }
+        <div class="row actions">
+          <button type="button" class="btn primary small" [disabled]="busy()" (click)="applyBulk()">Apply to {{ selected().size }} user(s)</button>
+          <button type="button" class="btn small" (click)="selected.set(emptySet)">Clear selection</button>
+        </div>
+        @if (bulkMessage()) {
+          <p class="muted hint">{{ bulkMessage() }}</p>
+        }
+      </div>
+    }
+
     <div class="card">
       <div class="table-wrap">
         <table class="list">
           <thead>
             <tr>
-              <th>User</th><th>Status</th><th>Limits</th><th>Invited by</th><th>Rooms</th><th>Referrals</th><th>This month</th><th>Last seen</th><th></th>
+              <th class="chk"><input type="checkbox" aria-label="Select all users" [checked]="allSelected()" (change)="toggleAll($any($event.target).checked)" /></th><th>User</th><th>Status</th><th>Limits</th><th>Invited by</th><th>Rooms</th><th>Referrals</th><th>This month</th><th>Last seen</th><th></th>
             </tr>
           </thead>
           <tbody>
             @for (u of users(); track u.id) {
               <tr>
+                <td class="chk"><input type="checkbox" [attr.aria-label]="'Select ' + u.name" [checked]="selected().has(u.id)" (change)="toggleOne(u.id, $any($event.target).checked)" /></td>
                 <td><b>{{ u.name }}</b></td>
                 <td>
                   <span class="badge" [class.good]="u.status === 'active'" [class.warn]="u.status === 'pending'" [class.bad]="u.status === 'disabled'">{{ u.status }}</span>
@@ -107,7 +139,7 @@ const CUSTOM = 'custom';
               @if (editing(); as e) {
                 @if (e.id === u.id) {
                   <tr class="edit">
-                    <td colspan="9">
+                    <td colspan="10">
                       <div class="row">
                         <div class="field narrow">
                           <label [for]="'q' + u.id">Referrals this user may create</label>
@@ -151,7 +183,7 @@ const CUSTOM = 'custom';
                 }
               }
             } @empty {
-              <tr><td colspan="9" class="muted">No users yet.</td></tr>
+              <tr><td colspan="10" class="muted">No users yet.</td></tr>
             }
           </tbody>
         </table>
@@ -159,6 +191,13 @@ const CUSTOM = 'custom';
     </div>
   `,
   styles: `
+    .chk {
+      width: 2rem;
+    }
+    .bulk {
+      margin-bottom: 1rem;
+      border-color: var(--accent);
+    }
     .create,
     .reveal {
       margin-bottom: 1rem;
@@ -200,6 +239,11 @@ export class Users implements OnInit, OnDestroy {
   protected readonly editChoice = signal('');
   protected readonly editLimits = signal<Limits | null>(null);
   protected readonly editQuota = signal(0);
+  protected readonly selected = signal<ReadonlySet<number>>(new Set());
+  protected readonly emptySet: ReadonlySet<number> = new Set();
+  protected readonly bulkChoice = signal('');
+  protected readonly bulkLimits = signal<Limits | null>(null);
+  protected readonly bulkMessage = signal<string | null>(null);
   protected readonly newChoice = signal('');
   protected readonly newLimits = signal<Limits | null>(null);
   protected newName = '';
@@ -214,12 +258,61 @@ export class Users implements OnInit, OnDestroy {
   async ngOnInit(): Promise<void> {
     await Promise.all([this.load(), this.loadPresets()]);
     const def = this.presets().find((p) => p.isDefault);
-    if (def) this.newChoice.set('' + def.id);
+    if (def) {
+      this.newChoice.set('' + def.id);
+      this.bulkChoice.set('' + def.id);
+    }
     this.timer = setInterval(() => void this.load(), 8000);
   }
 
   ngOnDestroy(): void {
     clearInterval(this.timer);
+  }
+
+  protected allSelected(): boolean {
+    const us = this.users();
+    return us.length > 0 && us.every((u) => this.selected().has(u.id));
+  }
+
+  protected toggleAll(on: boolean): void {
+    this.selected.set(on ? new Set(this.users().map((u) => u.id)) : new Set());
+  }
+
+  protected toggleOne(id: number, on: boolean): void {
+    const next = new Set(this.selected());
+    if (on) next.add(id);
+    else next.delete(id);
+    this.selected.set(next);
+  }
+
+  protected chooseBulk(choice: string): void {
+    if (choice === CUSTOM && !this.bulkLimits()) {
+      const from = this.presetOf(this.bulkChoice()) ?? this.presets().find((p) => p.isDefault);
+      if (from) this.bulkLimits.set({ ...from.limits });
+    }
+    this.bulkChoice.set(choice);
+  }
+
+  /** Give the same preset (or the same hand-written limits) to every selected user. */
+  protected async applyBulk(): Promise<void> {
+    const ids = [...this.selected()];
+    const choice = this.bulkChoice();
+    if (!ids.length || !choice) return;
+    const what = choice === CUSTOM ? 'these custom limits' : `the "${this.presetOf(choice)?.name}" preset`;
+    if (!confirm(`Give ${what} to ${ids.length} user(s)? Their streams pick it up right away.`)) return;
+    this.busy.set(true);
+    this.bulkMessage.set(null);
+    const failed: string[] = [];
+    for (const id of ids) {
+      try {
+        await this.api.patch(`/api/admin/users/${id}`, choice === CUSTOM ? { limits: this.bulkLimits() } : { presetId: Number(choice) });
+      } catch (e: any) {
+        failed.push(`${this.users().find((u) => u.id === id)?.name ?? id}: ${e.message}`);
+      }
+    }
+    await Promise.all([this.load(), this.loadPresets()]);
+    this.busy.set(false);
+    this.bulkMessage.set(failed.length ? `Updated ${ids.length - failed.length} of ${ids.length}. Failed: ${failed.join('; ')}` : `Updated ${ids.length} user(s).`);
   }
 
   protected presetOf(choice: string): Preset | undefined {
