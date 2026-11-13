@@ -23,8 +23,9 @@ const mediaCodecs: types.RouterRtpCodecCapability[] = [
 
 export interface Sfu {
   worker: types.Worker;
-  router: types.Router;
   webRtcServer: types.WebRtcServer;
+  /** Every room gets its own router, so rooms are isolated and cleaned up independently. */
+  createRouter(): Promise<types.Router>;
 }
 
 export async function startSfu(): Promise<Sfu> {
@@ -41,7 +42,6 @@ export async function startSfu(): Promise<Sfu> {
       { protocol: 'tcp', ip: listenIp, announcedAddress: announcedIp, port },
     ],
   });
-  const router = await worker.createRouter({ mediaCodecs });
   console.log(`[sfu] mediasoup worker ${worker.pid} ready, WebRTC on ${listenIp}:${port} (udp+tcp), announced ${announcedIp}`);
-  return { worker, router, webRtcServer };
+  return { worker, webRtcServer, createRouter: () => worker.createRouter({ mediaCodecs }) };
 }
