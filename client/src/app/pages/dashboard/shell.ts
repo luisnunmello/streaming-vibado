@@ -21,7 +21,7 @@ import { StreamerService } from '../../core/streamer.service';
         <nav>
           <a routerLink="/dashboard/rooms" routerLinkActive="on">{{ 'Rooms' | t }}</a>
           @if (auth.me()?.role === 'admin' || (auth.me()?.limits?.maxTempInviteMinutes ?? 0) > 0) {
-            <a routerLink="/dashboard/invites" routerLinkActive="on">{{ 'Invites' | t }}</a>
+            <a routerLink="/dashboard/invites" routerLinkActive="on">{{ 'Invite guests' | t }}</a>
           }
           @if (auth.isUser() && (auth.me()?.referrals?.quota ?? 0) > 0) {
             <a routerLink="/dashboard/referrals" routerLinkActive="on">{{ 'Referrals' | t }}</a>

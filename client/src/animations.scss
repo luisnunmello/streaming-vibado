@@ -110,7 +110,8 @@ main.page > :not(router-outlet) {
 
 /* ---------- 3. rows and cards appear (only new ones: lists are tracked by id) ---------- */
 table.list tbody tr:not(.edit) {
-  animation: anim-rise 0.32s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  /* "backwards", not "both": keeping the final state would leave the row as a containing block for the fixed "More" menu */
+  animation: anim-rise 0.32s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
 }
 @for $i from 1 through 10 {
   table.list tbody tr:not(.edit):nth-child(#{$i}) {

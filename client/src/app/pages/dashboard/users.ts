@@ -168,6 +168,9 @@ const CUSTOM = 'custom';
                         <div class="field narrow">
                           <label [for]="'q' + u.id">{{ 'Referrals this user may create' | t }}</label>
                           <input [id]="'q' + u.id" type="number" min="0" max="1000" [value]="editQuota()" (input)="editQuota.set(+$any($event.target).value)" />
+                          @if (u.referralsUsed > 0) {
+                            <small class="muted">{{ '{n} already used' | t: { n: u.referralsUsed } }}</small>
+                          }
                         </div>
                         <div class="field narrow">
                           <label [for]="'p' + u.id">{{ 'Limits' | t }}</label>
@@ -585,7 +588,8 @@ export class Users implements OnInit, OnDestroy {
     this.optParents.set(false);
     this.editChoice.set(u.presetId ? '' + u.presetId : CUSTOM);
     this.editLimits.set({ ...u.limits });
-    this.editQuota.set(u.referralQuota);
+    // the field counts only the referrals still to give: the ones already used are kept on top of it
+    this.editQuota.set(Math.max(0, u.referralQuota - u.referralsUsed));
   }
 
   protected chooseEdit(choice: string): void {
@@ -596,7 +600,7 @@ export class Users implements OnInit, OnDestroy {
 
   protected save(u: UserView): Promise<void> {
     return this.act(async () => {
-      const body: Record<string, unknown> = { referralQuota: this.editQuota() };
+      const body: Record<string, unknown> = { referralQuota: Math.max(0, this.editQuota()) + u.referralsUsed };
       if (this.editChoice() === CUSTOM) body['limits'] = this.editLimits();
       else if (this.editChoice() !== (u.presetId ? '' + u.presetId : '')) body['presetId'] = Number(this.editChoice());
       await this.api.patch(`/api/admin/users/${u.id}`, body);

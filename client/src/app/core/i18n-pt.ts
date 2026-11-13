@@ -1,6 +1,8 @@
 /** Portuguese (Brazil) translations; the key is the English text. Missing keys simply show in English. */
 export const PT: Record<string, string> = {
   // ---- general
+  'Invite guests': 'Convidar visitantes',
+  '{n} already used': '{n} já usada(s)',
   'Sounds': 'Sons',
   'Sounds on': 'Sons ligados',
   'Mute sounds': 'Silenciar os sons',
