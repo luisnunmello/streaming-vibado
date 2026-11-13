@@ -1,5 +1,5 @@
 import { Routes } from '@angular/router';
-import { adminGuard, authGuard, userGuard } from './core/guards';
+import { adminGuard, authGuard, homeGuard, userGuard } from './core/guards';
 import { Activate } from './pages/activate';
 import { Account } from './pages/dashboard/account';
 import { Bandwidth } from './pages/dashboard/bandwidth';
@@ -15,7 +15,7 @@ import { Login } from './pages/login';
 import { Viewer } from './viewer/viewer';
 
 export const routes: Routes = [
-  { path: '', component: Home, title: 'Streaming' },
+  { path: '', component: Home, canActivate: [homeGuard], title: 'Streaming' },
   { path: 'lobbies', component: Lobbies, title: 'Public rooms' },
   { path: 'r/:slug', component: Viewer, title: 'Live stream' },
   { path: 'login', component: Login, title: 'Sign in' },

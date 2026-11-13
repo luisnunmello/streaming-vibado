@@ -20,3 +20,10 @@ export const userGuard: CanActivateFn = async () => {
   await auth.ensureLoaded();
   return auth.isUser() ? true : inject(Router).createUrlTree(['/dashboard']);
 };
+
+/** The home page is for visitors: someone who is signed in lands on their dashboard instead. */
+export const homeGuard: CanActivateFn = async () => {
+  const auth = inject(AuthService);
+  await auth.ensureLoaded();
+  return auth.me() ? inject(Router).createUrlTree(['/dashboard']) : true;
+};
