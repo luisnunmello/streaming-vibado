@@ -3,6 +3,7 @@ import {
   activate,
   authenticate,
   changeOwnPassword,
+  renameUser,
   createUser,
   createReferral,
   deleteUser,
@@ -268,6 +269,17 @@ export function buildApi(live: LiveService, budget: BudgetManager): Router {
         monthBytes: monthlyBytes(g.id),
         invitedByName: g.invitedBy ? userName(g.invitedBy) : null,
       });
+    }),
+  );
+
+  api.put(
+    '/me/name',
+    requireAuth,
+    wrap((req, res) => {
+      const p = principalOf(res);
+      if (p.role !== 'user') throw new HttpError(403, 'The administrator name cannot be changed');
+      const user = renameUser(p.userId!, req.body?.name);
+      res.json({ name: user.name });
     }),
   );
 

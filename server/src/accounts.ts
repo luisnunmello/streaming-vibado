@@ -103,6 +103,15 @@ export function validateName(name: unknown): string {
   return n;
 }
 
+/** A user changes their own name (it is also the name they sign in with). */
+export function renameUser(id: number, nameInput: unknown): User {
+  const name = validateName(nameInput);
+  const taken = get<{ id: number }>('SELECT id FROM users WHERE name = ?', name);
+  if (taken && taken.id !== id) throw new HttpError(409, 'That name is already taken');
+  run('UPDATE users SET name = ? WHERE id = ?', name, id);
+  return getUser(id)!;
+}
+
 function ensureNameFree(name: string): void {
   if (get('SELECT 1 FROM users WHERE name = ?', name)) throw new HttpError(409, 'That name is already taken');
 }

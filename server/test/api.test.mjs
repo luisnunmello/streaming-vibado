@@ -117,6 +117,19 @@ describe('accounts, referrals and rooms', () => {
     assert.deepEqual(me.referrals, { quota: 2, used: 0 });
   });
 
+  it('users can change their own name; names stay unique and valid', async () => {
+    const t = state.aliceToken;
+    const put = (token, name) => api('PUT', '/api/me/name', { token, body: { name } });
+    assert.equal((await put(t, 'x')).status, 400);
+    assert.equal((await put(t, 'admin-two')).status, 400);
+    assert.equal((await put(admin, 'newadmin')).status, 403, 'the administrator keeps the fixed name');
+    assert.equal((await put(t, 'alice-renamed')).status, 200);
+    assert.equal((await api('GET', '/api/me', { token: t })).name, 'alice-renamed');
+    assert.ok(await login('alice-renamed', 'alice-password-1'), 'signs in with the new name');
+    assert.equal((await put(t, 'ALICE-RENAMED')).status, 200, 'changing only the letter case is allowed');
+    assert.equal((await put(t, 'alice')).status, 200);
+  });
+
   it('enforces the room limit and public-room permission', async () => {
     const t = state.aliceToken;
     const a = await api('POST', '/api/rooms', { token: t, body: { name: 'Alice Games', visibility: 'public' } });
