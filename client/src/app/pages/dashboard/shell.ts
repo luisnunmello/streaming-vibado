@@ -363,8 +363,11 @@ import { StreamerService } from '../../core/streamer.service';
         border-left: 1px solid var(--line);
         box-shadow: -12px 0 32px rgba(0, 0, 0, 0.35);
         z-index: 30;
-        flex-direction: column;
-        align-items: stretch;
+        /* rows: nav, live chip and sign out take a full row; sound, language and user share one */
+        flex-direction: row;
+        flex-wrap: wrap;
+        align-content: flex-start;
+        align-items: center;
         gap: 0.7rem;
         padding: 4.2rem 1rem 1.5rem;
         background: var(--panel);
@@ -390,6 +393,12 @@ import { StreamerService } from '../../core/streamer.service';
       .menu > * {
         order: 0;
       }
+      .menu nav,
+      .menu .livechip,
+      .menu .out,
+      .menu .keyl {
+        flex: 1 1 100%;
+      }
       .menu nav {
         order: 1;
         flex-direction: column;
@@ -408,17 +417,17 @@ import { StreamerService } from '../../core/streamer.service';
       }
       .menu .soundbtn {
         order: 2;
-        align-self: flex-start;
-        width: auto;
-        padding: 0 0.9rem;
+        width: 38px;
         height: 38px;
       }
       .menu app-lang-switch {
         order: 2;
-        align-self: flex-start;
       }
       .menu .who {
         order: 3;
+        flex: 1 1 0;
+        min-width: 0;
+        text-align: right;
       }
       .menu .out,
       .menu .keyl {
