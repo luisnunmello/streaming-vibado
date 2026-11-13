@@ -478,11 +478,10 @@ export function buildApi(live: LiveService, budget: BudgetManager): Router {
     }),
   );
 
-  /** Everyone above `id` in the invitation chain, nearest first. */
-  const ancestors = (id: number): number[] => {
-    const out: number[] = [];
-    for (let u = getUser(id); u?.invitedBy; u = getUser(u.invitedBy)) out.push(u.invitedBy);
-    return out;
+  /** The user who invited `id` (only the direct referrer, not the people above them). */
+  const referrerOf = (id: number): number[] => {
+    const by = getUser(id)?.invitedBy;
+    return by ? [by] : [];
   };
 
   api.post(
@@ -502,7 +501,7 @@ export function buildApi(live: LiveService, budget: BudgetManager): Router {
         }
       }
       if (withParents) {
-        for (const p of ancestors(id)) {
+        for (const p of referrerOf(id)) {
           targets.set(p, `${user.name}, someone you referred, was restricted${reason ? ': ' + reason : '.'}`);
         }
       }
@@ -523,7 +522,7 @@ export function buildApi(live: LiveService, budget: BudgetManager): Router {
       if (!getUser(id)) throw new HttpError(404, 'User not found');
       const ids = new Set<number>([id]);
       if (req.body?.children !== false) for (const c of subtree(id)) ids.add(c);
-      if (req.body?.parents === true) for (const p of ancestors(id)) ids.add(p);
+      if (req.body?.parents === true) for (const p of referrerOf(id)) ids.add(p);
       for (const uid of ids) setRestriction(uid, false);
       res.json({ lifted: [...ids], users: listUsers().map(userView) });
     }),

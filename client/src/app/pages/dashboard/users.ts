@@ -170,7 +170,7 @@ const CUSTOM = 'custom';
                         <div class="restrictbox">
                           <p><b>Restricted:</b> {{ u.restrictedReason }}</p>
                           <label class="check"><input type="checkbox" [checked]="optChildren()" (change)="optChildren.set($any($event.target).checked)" /> Also lift it for everyone they referred (and the people those referred…)</label>
-                          <label class="check"><input type="checkbox" [checked]="optParents()" (change)="optParents.set($any($event.target).checked)" /> Also lift it for who referred them (and above)</label>
+                          <label class="check"><input type="checkbox" [checked]="optParents()" (change)="optParents.set($any($event.target).checked)" /> Also lift it for who referred them</label>
                           <button type="button" class="btn small" (click)="unrestrict(u)">Lift restriction</button>
                         </div>
                       } @else {
@@ -182,7 +182,7 @@ const CUSTOM = 'custom';
                             <textarea [id]="'rs' + u.id" rows="2" maxlength="500" [value]="restrictReason()" (input)="restrictReason.set($any($event.target).value)"></textarea>
                           </div>
                           <label class="check"><input type="checkbox" [checked]="optChildren()" (change)="optChildren.set($any($event.target).checked)" /> Also restrict everyone they referred (and the people those referred…)</label>
-                          <label class="check"><input type="checkbox" [checked]="optParents()" (change)="optParents.set($any($event.target).checked)" /> Also restrict who referred them (and above)</label>
+                          <label class="check"><input type="checkbox" [checked]="optParents()" (change)="optParents.set($any($event.target).checked)" /> Also restrict who referred them</label>
                           <button type="button" class="btn small danger" (click)="restrict(u)">Restrict access</button>
                         </details>
                       }
