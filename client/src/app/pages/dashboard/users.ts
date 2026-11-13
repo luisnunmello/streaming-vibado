@@ -1,6 +1,8 @@
 import { Component, OnDestroy, OnInit, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
+import { AuthService } from '../../core/auth.service';
+import { StreamerService } from '../../core/streamer.service';
 import { ApiService } from '../../core/api.service';
 import { describeLimits, type Limits, type Preset, type UserView } from '../../core/models';
 import { absoluteUrl, copyText, formatBytes, timeAgo } from '../../core/util';
@@ -196,6 +198,9 @@ const CUSTOM = 'custom';
                         } @else if (u.status === 'active') {
                           <button type="button" class="btn small" (click)="disable(u)">Disable</button>
                         }
+                        @if (u.status === 'active') {
+                          <button type="button" class="btn small" title="Sign in as this user for debugging; you can return to admin from the top bar" (click)="useAs(u)">Use temporarily</button>
+                        }
                         <button type="button" class="btn small danger" (click)="remove(u)">Delete</button>
                       </div>
                     </td>
@@ -269,6 +274,9 @@ const CUSTOM = 'custom';
 })
 export class Users implements OnInit, OnDestroy {
   private readonly api = inject(ApiService);
+  private readonly auth = inject(AuthService);
+  private readonly router = inject(Router);
+  private readonly streamer = inject(StreamerService);
   protected readonly users = signal<UserView[]>([]);
   protected readonly presets = signal<Preset[]>([]);
   protected readonly error = signal<string | null>(null);
@@ -451,6 +459,17 @@ export class Users implements OnInit, OnDestroy {
       this.editing.set(null);
       await this.loadPresets();
     });
+  }
+
+  protected async useAs(u: UserView): Promise<void> {
+    this.error.set(null);
+    try {
+      await this.streamer.leave(); // no stream may carry over between accounts
+      await this.auth.impersonate(u.id);
+      await this.router.navigateByUrl('/dashboard/rooms');
+    } catch (e: any) {
+      this.error.set(e.message);
+    }
   }
 
   protected restrict(u: UserView): Promise<void> {

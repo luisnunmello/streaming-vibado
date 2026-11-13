@@ -27,9 +27,9 @@ export function onRevoke(cb: (tokens: string[]) => void): void {
 }
 
 /** `remember` keeps the session for 30 days and across server restarts (e.g. a redeploy). */
-export function createSession(principal: Principal, remember = false): string {
+export function createSession(principal: Principal, remember = false, ttlMs?: number): string {
   const token = crypto.randomBytes(32).toString('base64url');
-  const expires = Date.now() + (remember ? REMEMBER_TTL_MS : SESSION_TTL_MS);
+  const expires = Date.now() + (ttlMs ?? (remember ? REMEMBER_TTL_MS : SESSION_TTL_MS));
   sessions.set(token, { principal, expires });
   if (remember) {
     run('INSERT INTO sessions (token_hash, role, user_id, expires_at) VALUES (?, ?, ?, ?)', hashToken(token), principal.role, principal.userId ?? null, expires);

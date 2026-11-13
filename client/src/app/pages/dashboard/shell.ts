@@ -32,6 +32,12 @@ import { StreamerService } from '../../core/streamer.service';
       <span class="who">{{ auth.me()?.name }} <span class="badge">{{ auth.me()?.role }}</span></span>
       <button type="button" class="btn small" (click)="logout()">Sign out</button>
     </header>
+    @if (auth.adminBackup()) {
+      <div class="usingbar" role="status">
+        <span>Using the account of <b>{{ auth.me()?.name }}</b> (admin debug mode). Everything you do here counts as that user.</span>
+        <button type="button" class="btn small" (click)="returnToAdmin()">Return to admin</button>
+      </div>
+    }
     <main class="page">
       @if (auth.me()?.restricted) {
         <div class="restricted" role="alert">
@@ -46,6 +52,20 @@ import { StreamerService } from '../../core/streamer.service';
     </main>
   `,
   styles: `
+    .usingbar {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 1rem;
+      flex-wrap: wrap;
+      padding: 0.5rem 1rem;
+      background: #b54708;
+      color: #fff;
+      font-size: 0.92rem;
+    }
     .restricted {
       margin-bottom: 1rem;
       padding: 1rem 1.2rem;
@@ -157,7 +177,14 @@ export class Shell implements OnInit, OnDestroy {
     clearInterval(this.timer);
   }
 
+  protected async returnToAdmin(): Promise<void> {
+    await this.streamer.leave(); // anything started as the user ends here
+    await this.auth.returnToAdmin();
+    await this.router.navigateByUrl('/dashboard/users');
+  }
+
   protected async logout(): Promise<void> {
+    if (this.auth.adminBackup()) return this.returnToAdmin(); // signing out of a borrowed account goes back to admin
     await this.streamer.leave(); // signing out ends any running stream
     await this.auth.logout();
     await this.router.navigateByUrl('/');

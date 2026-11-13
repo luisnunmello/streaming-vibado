@@ -520,3 +520,21 @@ describe('restricting users', () => {
     assert.match((await api('GET', '/api/me', { token: mid.token })).restrictedReason, /rchild, someone you referred, was restricted: x/);
   });
 });
+
+describe('using a user account temporarily', () => {
+  it('lets the admin get a session as an active user, and nobody else', async () => {
+    const admin = await login('admin', 'new-master-pass-1');
+    const r = await api('POST', '/api/admin/users', { token: admin, body: { name: 'debugme' } });
+    assert.equal((await api('POST', `/api/admin/users/${r.user.id}/impersonate`, { token: admin })).status, 400, 'pending users cannot be used');
+    const a = await api('POST', '/api/activate', { body: { key: r.key, password: 'debugme-password-1' } });
+    const imp = await api('POST', `/api/admin/users/${r.user.id}/impersonate`, { token: admin });
+    assert.equal(imp.status, 200);
+    const me = await api('GET', '/api/me', { token: imp.token });
+    assert.equal(me.name, 'debugme');
+    assert.equal(me.role, 'user');
+    assert.equal((await api('POST', `/api/admin/users/${r.user.id}/impersonate`, { token: a.token })).status, 403, 'users cannot do it');
+    assert.equal((await api('GET', '/api/me', { token: admin })).role, 'admin', 'the admin session is untouched');
+    await api('POST', '/api/logout', { token: imp.token });
+    assert.equal((await api('GET', '/api/me', { token: imp.token })).status, 401);
+  });
+});

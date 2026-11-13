@@ -465,6 +465,19 @@ export function buildApi(live: LiveService, budget: BudgetManager): Router {
     }),
   );
 
+  // "Use temporarily": a short session as that user, for debugging. The admin keeps their own token on the client.
+  api.post(
+    '/admin/users/:id/impersonate',
+    requireAdmin,
+    wrap((req, res) => {
+      const user = getUser(idParam(req));
+      if (!user) throw new HttpError(404, 'User not found');
+      if (user.status !== 'active') throw new HttpError(400, 'Only active users can be used (pending and disabled accounts cannot sign in)');
+      console.log(`[admin] using the account of "${user.name}" (${req.ip})`);
+      res.json({ token: createSession({ role: 'user', userId: user.id }, false, 2 * 60 * 60 * 1000), name: user.name });
+    }),
+  );
+
   /** Everyone above `id` in the invitation chain, nearest first. */
   const ancestors = (id: number): number[] => {
     const out: number[] = [];
