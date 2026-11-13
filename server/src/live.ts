@@ -398,6 +398,13 @@ export class LiveService {
       if (!ci) throw new ClientError('Unknown consumer');
       this.applyLayers(peer, ci);
       if (!peer.hidden) await ci.consumer.resume();
+      if (ci.consumer.kind === 'video') ci.consumer.requestKeyFrame().catch(() => undefined);
+    });
+
+    // A viewer whose picture stays black asks for a fresh keyframe.
+    on('requestKeyFrame', async ({ consumerId }) => {
+      const ci = peer.consumers.get(consumerId);
+      if (ci?.consumer.kind === 'video') await ci.consumer.requestKeyFrame().catch(() => undefined);
     });
 
     on('setQuality', ({ consumerId, quality }) => {
