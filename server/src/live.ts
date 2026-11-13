@@ -37,6 +37,8 @@ export interface Peer {
   /** True once this viewer has passed the bandwidth admission check for the current stream. */
   admitted: boolean;
   hidden: boolean;
+  /** Last time this connection did something (joined, changed quality…): decides which stream is dropped first. */
+  lastActive: number;
   transports: Map<string, types.WebRtcTransport>;
   producers: Map<string, types.Producer>;
   consumers: Map<string, ConsumerInfo>;
@@ -221,6 +223,7 @@ export class LiveService {
       ip: this.clientIp(socket),
       admitted: false,
       hidden: false,
+      lastActive: Date.now(),
       transports: new Map(),
       producers: new Map(),
       consumers: new Map(),
@@ -239,6 +242,7 @@ export class LiveService {
           ack = data;
           data = {};
         }
+        peer.lastActive = Date.now();
         try {
           const res = (await fn(data ?? {})) ?? {};
           ack?.({ ok: true, ...res });
@@ -462,6 +466,7 @@ export class LiveService {
         this.maybeDestroy(rt);
         throw new ClientError('This room is full');
       }
+      this.enforceWatchLimit(peer, room.id);
       const maxPerIp = getGlobals().maxConnectionsPerIp;
       const set = this.ipConnections.get(peer.ip) ?? new Set<string>();
       if (maxPerIp > 0 && set.size >= maxPerIp) {
@@ -485,6 +490,31 @@ export class LiveService {
       rtpCapabilities: rt.router.rtpCapabilities,
       limits: owner ? (ownerUser?.limits ?? null) : undefined,
     };
+  }
+
+  /**
+   * A signed-in user may watch `maxWatching` streams at once. Opening one more ends the stream they interacted
+   * with the longest time ago. (Windows on the same room count as one stream; anonymous viewers have no account to count.)
+   */
+  private enforceWatchLimit(peer: Peer, newRoomId: string): void {
+    const p = peer.principal;
+    if (p?.role !== 'user') return;
+    const max = getUser(p.userId!)?.limits.maxWatching ?? 1;
+    const groups = new Map<string, Peer[]>();
+    for (const other of this.peers.values()) {
+      if (other === peer || other.isOwner || !other.roomId || other.roomId === newRoomId) continue;
+      if (other.principal?.role !== 'user' || other.principal.userId !== p.userId) continue;
+      groups.set(other.roomId, [...(groups.get(other.roomId) ?? []), other]);
+    }
+    const lastUse = (g: Peer[]) => Math.max(...g.map((x) => x.lastActive));
+    while (groups.size >= max && groups.size > 0) {
+      const [oldestRoom, oldest] = [...groups.entries()].sort((a, b) => lastUse(a[1]) - lastUse(b[1]))[0];
+      for (const other of oldest) {
+        other.socket.emit('kicked', { reason: 'You started watching another stream, and your account can watch only ' + max + ' at a time.' });
+        this.leaveRoom(other);
+      }
+      groups.delete(oldestRoom);
+    }
   }
 
   private leaveRoom(peer: Peer): void {

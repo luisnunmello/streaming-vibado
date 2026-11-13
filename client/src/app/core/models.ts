@@ -5,6 +5,7 @@ export interface Limits {
   maxHeight: number;
   maxFps: number;
   maxViewersPerRoom: number;
+  maxWatching: number;
   maxStreamMinutes: number;
   allowPublicRooms: boolean;
   allowAudio: boolean;
@@ -123,6 +124,7 @@ export const LIMIT_FIELDS: { key: keyof Limits; label: string; hint?: string; ty
   { key: 'maxHeight', label: 'Max resolution (height, px)', type: 'number' },
   { key: 'maxFps', label: 'Max frame rate', type: 'number' },
   { key: 'maxViewersPerRoom', label: 'Max viewers per room', type: 'number' },
+  { key: 'maxWatching', label: 'Streams watched at once', type: 'number' },
   { key: 'maxStreamMinutes', label: 'Max stream length (min)', hint: '0 = unlimited', type: 'number' },
   { key: 'monthlyGb', label: 'Monthly traffic (GB)', hint: '0 = unlimited', type: 'number' },
   { key: 'allowPublicRooms', label: 'May create public rooms', type: 'boolean' },

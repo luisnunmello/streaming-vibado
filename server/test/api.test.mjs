@@ -538,3 +538,43 @@ describe('using a user account temporarily', () => {
     assert.equal((await api('GET', '/api/me', { token: imp.token })).status, 401);
   });
 });
+
+describe('watching several streams at once', () => {
+  it('a user watching more streams than allowed loses the one they used least recently', async () => {
+    const admin = await login('admin', 'new-master-pass-1');
+    const r = await api('POST', '/api/admin/users', { token: admin, body: { name: 'watcher', limits: { maxWatching: 2 } } });
+    const a = await api('POST', '/api/activate', { body: { key: r.key, password: 'watcher-password-1' } });
+    const mk = async (name) => (await api('POST', '/api/rooms', { token: admin, body: { name, visibility: 'public' } })).room.slug;
+    const [s1, s2, s3] = [await mk('Watch one'), await mk('Watch two'), await mk('Watch three')];
+    // the rooms need an owner online to exist
+    const owners = [await join(s1, { token: admin }), await join(s2, { token: admin }), await join(s3, { token: admin })];
+
+    const w1 = await join(s1, { token: a.token });
+    await new Promise((x) => setTimeout(x, 20));
+    const w2 = await join(s2, { token: a.token });
+    let kicked1 = false;
+    let kicked2 = false;
+    w1.socket.on('kicked', () => (kicked1 = true));
+    w2.socket.on('kicked', () => (kicked2 = true));
+    await new Promise((x) => setTimeout(x, 20));
+    await w1.socket.timeout(2000).emitWithAck('setPaused', { paused: false }); // interacting with stream 1 makes stream 2 the oldest
+    await new Promise((x) => setTimeout(x, 20));
+    const w3 = await join(s3, { token: a.token });
+    assert.equal(w3.reply.role, 'viewer');
+    await new Promise((x) => setTimeout(x, 100));
+    assert.equal(kicked2, true, 'stream 2 was the least recently used');
+    assert.equal(kicked1, false);
+
+    // the default is one stream at a time
+    const solo = await api('POST', '/api/admin/users', { token: admin, body: { name: 'solo' } });
+    const sa = await api('POST', '/api/activate', { body: { key: solo.key, password: 'solo-password-1' } });
+    const x1 = await join(s1, { token: sa.token });
+    let kickedX = false;
+    x1.socket.on('kicked', () => (kickedX = true));
+    const x2 = await join(s2, { token: sa.token });
+    await new Promise((x) => setTimeout(x, 100));
+    assert.equal(kickedX, true, 'default limit is 1');
+    for (const o of owners) o.socket.close();
+    for (const s of [w1, w2, w3, x1, x2]) s.socket.close();
+  });
+});

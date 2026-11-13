@@ -44,6 +44,7 @@ import { formatBytes } from '../../core/util';
                 <tr><td class="muted">Streaming at the same time</td><td>{{ l.maxStreams }} room(s)</td></tr>
                 <tr><td class="muted">Quality</td><td>up to {{ l.maxHeight }}p, {{ l.maxFps }} fps, {{ l.maxBitrateMbps }} Mbps</td></tr>
                 <tr><td class="muted">Viewers per room</td><td>{{ l.maxViewersPerRoom }}</td></tr>
+                <tr><td class="muted">Streams you can watch at once</td><td>{{ l.maxWatching }}</td></tr>
                 <tr><td class="muted">Stream length</td><td>{{ l.maxStreamMinutes ? l.maxStreamMinutes + ' min' : 'unlimited' }}</td></tr>
                 <tr><td class="muted">Public rooms</td><td>{{ l.allowPublicRooms ? 'allowed' : 'not allowed' }}</td></tr>
                 <tr><td class="muted">Audio</td><td>{{ l.allowAudio ? 'allowed' : 'not allowed' }}</td></tr>

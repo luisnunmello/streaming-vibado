@@ -9,6 +9,8 @@ export interface Limits {
   maxHeight: number;
   maxFps: number;
   maxViewersPerRoom: number;
+  /** Streams this account may watch at the same time; starting another ends the one used least recently. */
+  maxWatching: number;
   /** 0 = unlimited. */
   maxStreamMinutes: number;
   allowPublicRooms: boolean;
@@ -24,6 +26,7 @@ export const FALLBACK_LIMITS: Limits = {
   maxHeight: 720,
   maxFps: 30,
   maxViewersPerRoom: 10,
+  maxWatching: 1,
   maxStreamMinutes: 120,
   allowPublicRooms: true,
   allowAudio: true,
@@ -38,6 +41,7 @@ const RANGES: Record<NumericKey, [number, number]> = {
   maxHeight: [240, 2160],
   maxFps: [5, 120],
   maxViewersPerRoom: [0, 100_000],
+  maxWatching: [1, 20],
   maxStreamMinutes: [0, 1440],
   monthlyGb: [0, 1_000_000],
 };
@@ -84,6 +88,7 @@ export function clampToParent(child: Limits, parent: Limits): Limits {
     maxHeight: Math.min(child.maxHeight, parent.maxHeight),
     maxFps: Math.min(child.maxFps, parent.maxFps),
     maxViewersPerRoom: Math.min(child.maxViewersPerRoom, parent.maxViewersPerRoom),
+    maxWatching: Math.min(child.maxWatching, parent.maxWatching),
     maxStreamMinutes: back(Math.min(unlimited(child.maxStreamMinutes), unlimited(parent.maxStreamMinutes))),
     allowPublicRooms: child.allowPublicRooms && parent.allowPublicRooms,
     allowAudio: child.allowAudio && parent.allowAudio,

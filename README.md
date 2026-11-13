@@ -64,7 +64,7 @@ Keys are stored hashed, so they cannot be shown again after creation. Activation
 
 ## Limits and bandwidth protection
 
-Each user has limits (rooms, simultaneous streams, bitrate, resolution, frame rate, viewers per room, stream length, public rooms, audio, monthly traffic), enforced on the server.
+Each user has limits (rooms, simultaneous streams, bitrate, resolution, frame rate, viewers per room, streams watched at once, stream length, public rooms, audio, monthly traffic), enforced on the server.
 
 **Limit presets.** Limits are organised in named presets (*Presets* page), for example "Small", "Friends", "Trusted". A user *follows* a preset: change the preset and every user on it gets the new limits **immediately**, including in their open studio and on their running stream. New and invited users start on the preset marked *default*. A single user can instead be given **custom limits** (they stop following any preset); choosing a preset for them again links them back. Deleting a preset leaves its users on their current limits as custom values.
 
