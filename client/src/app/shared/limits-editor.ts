@@ -1,22 +1,24 @@
 import { Component, model } from '@angular/core';
+import { TPipe } from '../core/i18n.service';
 import { LIMIT_FIELDS, type Limits } from '../core/models';
 
 /** Form fields for every per-account limit. */
 @Component({
+  imports: [TPipe],
   selector: 'app-limits-editor',
   template: `
     <div class="cols">
       @for (f of fields; track f.key) {
         @if (f.type === 'number') {
           <div class="field">
-            <label [for]="uid + f.key">{{ f.label }}@if (f.hint) { <small>{{ f.hint }}</small> }</label>
+            <label [for]="uid + f.key">{{ f.label | t }}@if (f.hint) { <small>{{ f.hint | t }}</small> }</label>
             <input [id]="uid + f.key" type="number" min="0" [step]="f.step ?? 1"
                    [value]="$any(limits())[f.key]" (input)="set(f.key, +$any($event.target).value)" />
           </div>
         } @else {
           <label class="check">
             <input type="checkbox" [checked]="$any(limits())[f.key]" (change)="set(f.key, $any($event.target).checked)" />
-            {{ f.label }}
+            {{ f.label | t }}
           </label>
         }
       }

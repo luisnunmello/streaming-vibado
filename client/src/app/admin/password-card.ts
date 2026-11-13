@@ -1,32 +1,33 @@
 import { Component, inject, signal } from '@angular/core';
+import { TPipe } from '../core/i18n.service';
 import { FormsModule } from '@angular/forms';
 import { AuthService } from '../core/auth.service';
 
 @Component({
   selector: 'app-password-card',
-  imports: [FormsModule],
+  imports: [FormsModule, TPipe],
   template: `
     <div class="card">
-      <h2>Change password</h2>
+      <h2>{{ 'Change password' | t }}</h2>
       <form (ngSubmit)="submit()" autocomplete="off">
         <div class="field">
-          <label for="cur">Current password</label>
+          <label for="cur">{{ 'Current password' | t }}</label>
           <input id="cur" type="password" name="cur" [(ngModel)]="current" autocomplete="current-password" required />
         </div>
         <div class="field">
-          <label for="new">New password <small>(min. 8 characters)</small></label>
+          <label for="new">{{ 'New password' | t }} <small>{{ '(min. 8 characters)' | t }}</small></label>
           <input id="new" type="password" name="new" [(ngModel)]="next" autocomplete="new-password" required minlength="8" />
         </div>
         <div class="field">
-          <label for="rep">Repeat new password</label>
+          <label for="rep">{{ 'Repeat new password' | t }}</label>
           <input id="rep" type="password" name="rep" [(ngModel)]="repeat" autocomplete="new-password" required />
         </div>
-        <button class="btn primary" type="submit" [disabled]="busy() || !current || !next || !repeat">Change password</button>
+        <button class="btn primary" type="submit" [disabled]="busy() || !current || !next || !repeat">{{ 'Change password' | t }}</button>
         @if (error()) {
-          <p class="error">{{ error() }}</p>
+          <p class="error">{{ error() | t }}</p>
         }
         @if (done()) {
-          <p class="ok">Password changed. Your other sessions were signed out.</p>
+          <p class="ok">{{ 'Password changed. Your other sessions were signed out.' | t }}</p>
         }
       </form>
     </div>

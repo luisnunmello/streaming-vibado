@@ -5,13 +5,13 @@
         <video #preview autoplay muted playsinline [class.hidden]="!s.preview()"></video>
         @if (!s.preview()) {
           <div class="placeholder">
-            <p>@if (s.state() === 'starting') { Pick a screen, window or tab… } @else { Preview appears here }</p>
+            <p>{{ (s.state() === 'starting' ? 'Pick a screen, window or tab…' : 'Preview appears here') | t }}</p>
           </div>
         }
         @if (live()) {
           <div class="overlay">
             <app-control-bar [ctl]="local" [compact]="true" />
-            <button type="button" class="fsbtn" (click)="toggleFullscreen()" [attr.aria-label]="fullscreen() ? 'Exit full screen' : 'Full screen preview'" title="Full screen preview">
+            <button type="button" class="fsbtn" (click)="toggleFullscreen()" [attr.aria-label]="fullscreen() ? 'Exit full screen' : 'Full screen preview'" [title]="'Full screen preview' | t">
               <svg viewBox="0 0 24 24" width="18" height="18">
                 @if (fullscreen()) {
                   <path fill="currentColor" d="M5 16h3v3h2v-5H5v2zm3-8H5v2h5V5H8v3zm6 11h2v-3h3v-2h-5v5zm2-11V5h-2v5h5V8h-3z"/>
@@ -26,67 +26,67 @@
 
       @if (s.changeRequested()) {
         <div class="banner">
-          <span>Your room page asked to change the screen. Pick the new one here (the browser needs a click in this tab).</span>
-          <button type="button" class="btn primary small" (click)="s.changeSource()">Choose new screen</button>
+          <span>{{ 'Your room page asked to change the screen. Pick the new one here (the browser needs a click in this tab).' | t }}</span>
+          <button type="button" class="btn primary small" (click)="s.changeSource()">{{ 'Choose new screen' | t }}</button>
         </div>
       }
 
       <div class="statusbar">
         <span class="pill" [class.live]="live()" [class.starting]="s.state() === 'starting'">
-          {{ live() ? 'LIVE' : s.state() === 'starting' ? 'STARTING' : 'OFFLINE' }}
+          {{ (live() ? 'LIVE' : s.state() === 'starting' ? 'STARTING' : 'OFFLINE') | t }}
         </span>
-        <span class="muted">{{ s.viewers() }} viewer{{ s.viewers() === 1 ? '' : 's' }}</span>
+        <span class="muted">{{ (s.viewers() === 1 ? '{n} viewer' : '{n} viewers') | t: { n: s.viewers() } }}</span>
         @if (live() && s.viewers() > 0) {
-          <span class="muted" title="Viewers × bitrate: what your server uploads right now (at most)">≈ {{ egressMbps() }} Mbps out</span>
+          <span class="muted" [title]="'Viewers × bitrate: what your server uploads right now (at most)' | t">{{ '≈ {n} Mbps out' | t: { n: egressMbps() } }}</span>
         }
         <span class="spacer"></span>
         @if (live()) {
           <button type="button" class="btn" [disabled]="s.changingSource()" (click)="s.changeSource()"
-                  title="Share a different screen, window or tab without stopping the stream">
-            {{ s.changingSource() ? 'Choosing…' : 'Change screen / window' }}
+                  [title]="'Share a different screen, window or tab without stopping the stream' | t">
+            {{ (s.changingSource() ? 'Choosing…' : 'Change screen / window') | t }}
           </button>
         }
         <button type="button" class="btn big" [class.primary]="!busy()" [class.danger]="busy()" [disabled]="!secure && !busy()" (click)="toggle()">
-          {{ busy() ? 'Stop streaming' : 'Start streaming' }}
+          {{ (busy() ? 'Stop streaming' : 'Start streaming') | t }}
         </button>
       </div>
 
       @if (!secure) {
-        <p class="error">Screen capture needs HTTPS (or localhost) and a desktop Chromium-based browser.</p>
+        <p class="error">{{ 'Screen capture needs HTTPS (or localhost) and a desktop Chromium-based browser.' | t }}</p>
       }
       @if (s.error(); as e) {
         <p class="error">{{ e }}</p>
       }
       @if (s.notice(); as n) {
-        <p class="notice">{{ n }}</p>
+        <p class="notice">{{ n | t }}</p>
       }
     </div>
 
     @if (live()) {
       <div class="card">
-        <h2>Live stats</h2>
+        <h2>{{ 'Live stats' | t }}</h2>
         @if (s.stats(); as st) {
           <div class="metrics">
-            <div><span>Sending</span><b>{{ (st.bitrateKbps / 1000).toFixed(1) }} Mbps</b></div>
-            <div><span>Output</span><b>{{ st.width }}×{{ st.height }} @ {{ st.fps }}</b></div>
+            <div><span>{{ 'Sending' | t }}</span><b>{{ (st.bitrateKbps / 1000).toFixed(1) }} Mbps</b></div>
+            <div><span>{{ 'Output' | t }}</span><b>{{ st.width }}×{{ st.height }} @ {{ st.fps }}</b></div>
             <div [class.warn]="st.limitation !== 'none'">
-              <span>Encoder limit</span>
-              <b>{{ st.limitation === 'none' ? 'None' : st.limitation === 'cpu' ? 'CPU too slow' : st.limitation === 'bandwidth' ? 'Upload bandwidth' : 'Other' }}</b>
+              <span>{{ 'Encoder limit' | t }}</span>
+              <b>{{ (st.limitation === 'none' ? 'None' : st.limitation === 'cpu' ? 'CPU too slow' : st.limitation === 'bandwidth' ? 'Upload bandwidth' : 'Other') | t }}</b>
             </div>
-            <div [class.warn]="st.encodeMs > 12"><span>Encode time</span><b>{{ st.encodeMs }} ms/frame</b></div>
-            <div [class.warn]="st.lossPct > 2"><span>Packet loss</span><b>{{ st.lossPct }}%</b></div>
-            <div><span>Round trip</span><b>{{ st.rttMs ?? '–' }}{{ st.rttMs != null ? ' ms' : '' }}</b></div>
-            <div><span>Est. bandwidth</span><b>{{ st.availableKbps != null ? (st.availableKbps / 1000).toFixed(1) + ' Mbps' : '–' }}</b></div>
-            <div><span>Source</span><b>{{ s.source()?.width }}×{{ s.source()?.height }}</b></div>
-            <div><span>Quality levels</span><b>{{ st.layers }}</b></div>
+            <div [class.warn]="st.encodeMs > 12"><span>{{ 'Encode time' | t }}</span><b>{{ st.encodeMs }} ms/frame</b></div>
+            <div [class.warn]="st.lossPct > 2"><span>{{ 'Packet loss' | t }}</span><b>{{ st.lossPct }}%</b></div>
+            <div><span>{{ 'Round trip' | t }}</span><b>{{ st.rttMs ?? '–' }}{{ st.rttMs != null ? ' ms' : '' }}</b></div>
+            <div><span>{{ 'Est. bandwidth' | t }}</span><b>{{ st.availableKbps != null ? (st.availableKbps / 1000).toFixed(1) + ' Mbps' : '–' }}</b></div>
+            <div><span>{{ 'Source' | t }}</span><b>{{ s.source()?.width }}×{{ s.source()?.height }}</b></div>
+            <div><span>{{ 'Quality levels' | t }}</span><b>{{ st.layers }}</b></div>
           </div>
           @if (st.limitation === 'cpu') {
-            <p class="notice">The encoder cannot keep up. Lower the resolution or frame rate, or restart with H.264 (hardware).</p>
+            <p class="notice">{{ 'The encoder cannot keep up. Lower the resolution or frame rate, or restart with H.264 (hardware).' | t }}</p>
           } @else if (st.limitation === 'bandwidth') {
-            <p class="notice">Your upload cannot carry this bitrate. Lower the bitrate or resolution.</p>
+            <p class="notice">{{ 'Your upload cannot carry this bitrate. Lower the bitrate or resolution.' | t }}</p>
           }
         } @else {
-          <p class="muted">Collecting…</p>
+          <p class="muted">{{ 'Collecting…' | t }}</p>
         }
       </div>
     }
@@ -95,28 +95,28 @@
   <div class="col">
     @if (s.limits(); as l) {
       <div class="card">
-        <h2>Your limits</h2>
+        <h2>{{ 'Your limits' | t }}</h2>
         <p class="hint limits">
-          Up to {{ l.maxHeight }}p at {{ l.maxFps }} fps and {{ l.maxBitrateMbps }} Mbps, {{ l.maxViewersPerRoom }} viewers
+          {{ 'Up to {h}p at {fps} fps and {mbps} Mbps, {v} viewers' | t: { h: l.maxHeight, fps: l.maxFps, mbps: l.maxBitrateMbps, v: l.maxViewersPerRoom } }}
           @if (l.maxStreamMinutes) {
-            , {{ l.maxStreamMinutes }} min per stream
+            , {{ '{n} min per stream' | t: { n: l.maxStreamMinutes } }}
           }
         </p>
       </div>
     }
 
     <div class="card">
-      <h2>Video quality <small>live</small></h2>
+      <h2>{{ 'Video quality' | t }} <small>{{ 'live' | t }}</small></h2>
       <div class="chips">
         @for (p of presets(); track p.label) {
           <button type="button" class="chip" [class.on]="isPreset(p)" (click)="applyPreset(p)">
-            <b>{{ p.label }}</b><span>{{ p.hint }}</span>
+            <b>{{ p.label | t }}</b><span>{{ p.hint | t }}</span>
           </button>
         }
       </div>
 
       <div class="field">
-        <span class="label">Frame rate</span>
+        <span class="label">{{ 'Frame rate' | t }}</span>
         <div class="seg">
           @for (f of fpsChoices(); track f) {
             <button type="button" [class.on]="settings().fps === f" (click)="patch({ fps: f })">{{ f }} fps</button>
@@ -125,100 +125,97 @@
       </div>
 
       <div class="field">
-        <span class="label">Resolution</span>
+        <span class="label">{{ 'Resolution' | t }}</span>
         <div class="seg">
           @for (r of resolutions(); track r.value) {
-            <button type="button" [class.on]="settings().height === r.value" (click)="patch({ height: r.value })">{{ r.label }}</button>
+            <button type="button" [class.on]="settings().height === r.value" (click)="patch({ height: r.value })">{{ r.label | t }}</button>
           }
         </div>
       </div>
 
       <div class="field">
-        <label for="bitrate">Bitrate <b>{{ settings().bitrateMbps }} Mbps</b></label>
+        <label for="bitrate">{{ 'Bitrate' | t }} <b>{{ settings().bitrateMbps }} Mbps</b></label>
         <input id="bitrate" type="range" [min]="maxBitrate() < 1 ? 0.5 : 1" [max]="maxBitrate()" step="0.5" [value]="settings().bitrateMbps"
                (input)="patch({ bitrateMbps: +$any($event.target).value })" />
-        <span class="hint">Higher keeps fast motion clean but uses more upload (yours and the server's).</span>
+        <span class="hint">{{ "Higher keeps fast motion clean but uses more upload (yours and the server's)." | t }}</span>
       </div>
 
       <div class="field">
-        <span class="label">When it can't keep up</span>
+        <span class="label">{{ "When it can't keep up" | t }}</span>
         <div class="seg">
-          <button type="button" [class.on]="settings().priority === 'motion'" (click)="patch({ priority: 'motion' })">Keep smooth</button>
-          <button type="button" [class.on]="settings().priority === 'balanced'" (click)="patch({ priority: 'balanced' })">Balanced</button>
-          <button type="button" [class.on]="settings().priority === 'detail'" (click)="patch({ priority: 'detail' })">Keep sharp</button>
+          <button type="button" [class.on]="settings().priority === 'motion'" (click)="patch({ priority: 'motion' })">{{ 'Keep smooth' | t }}</button>
+          <button type="button" [class.on]="settings().priority === 'balanced'" (click)="patch({ priority: 'balanced' })">{{ 'Balanced' | t }}</button>
+          <button type="button" [class.on]="settings().priority === 'detail'" (click)="patch({ priority: 'detail' })">{{ 'Keep sharp' | t }}</button>
         </div>
       </div>
     </div>
 
     <div class="card">
-      <h2>Codec <small>applies on next start</small></h2>
+      <h2>{{ 'Codec' | t }} <small>{{ 'applies on next start' | t }}</small></h2>
       <div class="seg">
         @for (c of codecs; track c.value) {
-          <button type="button" [class.on]="settings().codec === c.value" [disabled]="busy()" (click)="patch({ codec: c.value })">{{ c.label }}</button>
+          <button type="button" [class.on]="settings().codec === c.value" [disabled]="busy()" (click)="patch({ codec: c.value })">{{ c.label | t }}</button>
         }
       </div>
-      <p class="hint">{{ codecHint() }}</p>
+      <p class="hint">{{ codecHint() | t }}</p>
       <label class="check adaptive">
         <input type="checkbox" [checked]="settings().adaptive" [disabled]="busy()" (change)="patch({ adaptive: $any($event.target).checked })" />
-        <span>Adaptive quality <small>applies on next start</small></span>
+        <span>{{ 'Adaptive quality' | t }} <small>{{ 'applies on next start' | t }}</small></span>
       </label>
       <p class="hint">
-        Sends three quality levels. When the server is busy, or a viewer picks a lower quality, they get a smaller picture instead of being
-        refused. Uses more CPU on your side.
+        {{ 'Sends three quality levels. When the server is busy, or a viewer picks a lower quality, they get a smaller picture instead of being refused. Uses more CPU on your side.' | t }}
       </p>
     </div>
 
     @if (s.limits()?.allowAudio !== false) {
     <div class="card">
-      <h2>Audio</h2>
+      <h2>{{ 'Audio' | t }}</h2>
       <div class="field">
-        <span class="label">Screen audio <small>applies on next start</small></span>
+        <span class="label">{{ 'Screen audio' | t }} <small>{{ 'applies on next start' | t }}</small></span>
         <div class="seg">
           @for (m of audioModes; track m.value) {
-            <button type="button" [class.on]="settings().audioMode === m.value" [disabled]="busy()" (click)="patch({ audioMode: m.value })">{{ m.label }}</button>
+            <button type="button" [class.on]="settings().audioMode === m.value" [disabled]="busy()" (click)="patch({ audioMode: m.value })">{{ m.label | t }}</button>
           }
         </div>
-        <span class="hint">{{ audioHint() }}</span>
+        <span class="hint">{{ audioHint() | t }}</span>
       </div>
 
       <div class="field">
-        <label for="device">Extra input (mic or virtual cable) <small>applies on next start</small></label>
+        <label for="device">{{ 'Extra input (mic or virtual cable)' | t }} <small>{{ 'applies on next start' | t }}</small></label>
         <div class="row">
           <select id="device" [disabled]="busy()" [value]="settings().audioDeviceId" (change)="patch({ audioDeviceId: $any($event.target).value })">
-            <option value="">None</option>
+            <option value="">{{ 'None' | t }}</option>
             @for (d of devices(); track d.deviceId; let i = $index) {
               <option [value]="d.deviceId" [selected]="d.deviceId === settings().audioDeviceId">{{ deviceLabel(d, i) }}</option>
             }
           </select>
-          <button type="button" class="btn small" [disabled]="busy()" (click)="refreshDevices(true)" title="Ask for microphone permission to show device names">Refresh</button>
+          <button type="button" class="btn small" [disabled]="busy()" (click)="refreshDevices(true)" [title]="'Ask for microphone permission to show device names' | t">{{ 'Refresh' | t }}</button>
         </div>
       </div>
 
       <div class="field">
-        <label for="sg">Screen audio volume <b>{{ (settings().screenAudioGain * 100).toFixed(0) }}%</b></label>
+        <label for="sg">{{ 'Screen audio volume' | t }} <b>{{ (settings().screenAudioGain * 100).toFixed(0) }}%</b></label>
         <input id="sg" type="range" min="0" max="1.5" step="0.05" [value]="settings().screenAudioGain"
                (input)="patch({ screenAudioGain: +$any($event.target).value })" />
       </div>
       <div class="field">
-        <label for="dg">Extra input volume <b>{{ (settings().deviceGain * 100).toFixed(0) }}%</b></label>
+        <label for="dg">{{ 'Extra input volume' | t }} <b>{{ (settings().deviceGain * 100).toFixed(0) }}%</b></label>
         <input id="dg" type="range" min="0" max="1.5" step="0.05" [value]="settings().deviceGain"
                (input)="patch({ deviceGain: +$any($event.target).value })" />
       </div>
       <button type="button" class="btn small" [class.danger]="settings().muted" (click)="patch({ muted: !settings().muted })">
-        {{ settings().muted ? 'Audio muted: click to unmute' : 'Mute all audio' }}
+        {{ (settings().muted ? 'Audio muted: click to unmute' : 'Mute all audio') | t }}
       </button>
 
       <details class="help">
-        <summary>How do I exclude specific apps?</summary>
+        <summary>{{ 'How do I exclude specific apps?' | t }}</summary>
         <p>
-          Browsers cannot pick apps individually. Two ways to get close:
+          {{ 'Browsers cannot pick apps individually. Two ways to get close:' | t }}
         </p>
         <ol>
-          <li><b>Shared window only</b>: pick it above, then share one window. Sound from other apps is left out.</li>
+          <li><b>{{ 'Shared window only' | t }}</b>{{ ': pick it above, then share one window. Sound from other apps is left out.' | t }}</li>
           <li>
-            <b>Virtual audio cable</b> (e.g. VB-CABLE): in Windows <i>Settings → System → Sound → Volume mixer</i>, set the
-            apps you want to broadcast to output to "CABLE Input". Then choose "CABLE Output" as the extra input here and set
-            screen audio to "No screen audio". Only those apps are heard.
+            <b>{{ 'Virtual audio cable' | t }}</b> {{ '(e.g. VB-CABLE): in Windows' | t }} <i>{{ 'Settings → System → Sound → Volume mixer' | t }}</i>{{ ', set the apps you want to broadcast to output to "CABLE Input". Then choose "CABLE Output" as the extra input here and set screen audio to "No screen audio". Only those apps are heard.' | t }}
           </li>
         </ol>
       </details>

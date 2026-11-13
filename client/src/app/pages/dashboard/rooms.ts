@@ -14,33 +14,33 @@ import { absoluteUrl, copyText } from '../../core/util';
   imports: [FormsModule, RouterLink, TPipe],
   template: `
     <div class="head">
-      <h1 class="page-title">Rooms</h1>
+      <h1 class="page-title">{{ 'Rooms' | t }}</h1>
       <button type="button" class="btn primary" [disabled]="sharing()" (click)="share()">{{ 'Share screen' | t }}</button>
     </div>
 
     <div class="card create">
-      <h2>New room</h2>
+      <h2>{{ 'New room' | t }}</h2>
       @if (singleRoom() && ownCount() >= 1) {
-        <p class="muted">Your account has a single room, named after you. You can change its privacy in the list below.</p>
+        <p class="muted">{{ 'Your account has a single room, named after you. You can change its privacy in the list below.' | t }}</p>
       } @else {
       <form class="row" (ngSubmit)="create()">
         @if (!singleRoom()) {
-          <input type="text" name="name" [(ngModel)]="newName" placeholder="Room name" maxlength="40" required />
+          <input type="text" name="name" [(ngModel)]="newName" [placeholder]="'Room name' | t" maxlength="40" required />
         } @else {
           <b class="autoname">{{ i18n.t("{name}'s room", { name: auth.me()?.name ?? '' }) }}</b>
         }
         <select name="vis" [(ngModel)]="newVisibility">
-          <option value="public" [disabled]="!canPublic()">Public (listed in the lobby)</option>
-          <option value="private">Private (secret link)</option>
+          <option value="public" [disabled]="!canPublic()">{{ 'Public (listed in the lobby)' | t }}</option>
+          <option value="private">{{ 'Private (secret link)' | t }}</option>
         </select>
-        <button class="btn primary" type="submit" [disabled]="busy() || (!singleRoom() && !newName.trim()) || full()">Create room</button>
+        <button class="btn primary" type="submit" [disabled]="busy() || (!singleRoom() && !newName.trim()) || full()">{{ 'Create room' | t }}</button>
       </form>
       }
       @if (auth.me()?.limits; as l) {
-        <p class="muted hint">You are using {{ ownCount() }} of {{ l.maxRooms }} rooms.</p>
+        <p class="muted hint">{{ 'You are using {n} of {max} rooms.' | t: { n: ownCount(), max: l.maxRooms } }}</p>
       }
       @if (error()) {
-        <p class="error">{{ error() }}</p>
+        <p class="error">{{ error() | t }}</p>
       }
     </div>
 
@@ -49,12 +49,12 @@ import { absoluteUrl, copyText } from '../../core/util';
         <table class="list">
           <thead>
             <tr>
-              <th>Room</th>
+              <th>{{ 'Room' | t }}</th>
               @if (auth.isAdmin()) {
-                <th>Owner</th>
+                <th>{{ 'Owner' | t }}</th>
               }
-              <th>Access</th>
-              <th>Status</th>
+              <th>{{ 'Access' | t }}</th>
+              <th>{{ 'Status' | t }}</th>
               <th></th>
             </tr>
           </thead>
@@ -65,8 +65,8 @@ import { absoluteUrl, copyText } from '../../core/util';
                   @if (editing() === r.id) {
                     <form class="row" (ngSubmit)="saveName(r)">
                       <input type="text" name="rename" [(ngModel)]="editName" maxlength="40" />
-                      <button class="btn small primary" type="submit">Save</button>
-                      <button class="btn small" type="button" (click)="editing.set(null)">Cancel</button>
+                      <button class="btn small primary" type="submit">{{ 'Save' | t }}</button>
+                      <button class="btn small" type="button" (click)="editing.set(null)">{{ 'Cancel' | t }}</button>
                     </form>
                   } @else {
                     <b>{{ i18n.roomName(r) }}</b>
@@ -77,41 +77,41 @@ import { absoluteUrl, copyText } from '../../core/util';
                   <td>{{ r.ownerName }}</td>
                 }
                 <td>
-                  <span class="badge" [class.good]="r.visibility === 'public'">{{ r.visibility }}</span>
+                  <span class="badge" [class.good]="r.visibility === 'public'">{{ r.visibility | t }}</span>
                 </td>
                 <td>
                   @if (r.live) {
-                    <span class="badge live">LIVE</span> <span class="muted">{{ r.viewers }} watching</span>
+                    <span class="badge live">{{ 'LIVE' | t }}</span> <span class="muted">{{ '{n} watching' | t: { n: r.viewers } }}</span>
                   } @else {
-                    <span class="muted">offline</span>
+                    <span class="muted">{{ 'offline' | t }}</span>
                   }
                 </td>
                 <td>
                 <div class="actions">
                   @if (isMine(r)) {
-                    <a class="btn small primary" [routerLink]="['/dashboard/rooms', r.slug]">{{ r.live ? 'Open studio' : 'Stream' }}</a>
+                    <a class="btn small primary" [routerLink]="['/dashboard/rooms', r.slug]">{{ (r.live ? 'Open studio' : 'Stream') | t }}</a>
                   }
-                  <button type="button" class="btn small" (click)="copyLink(r)">{{ copied() === r.id ? 'Copied!' : 'Copy link' }}</button>
-                  <a class="btn small" [href]="r.link" target="_blank" rel="noopener">Open</a>
+                  <button type="button" class="btn small" (click)="copyLink(r)">{{ (copied() === r.id ? 'Copied!' : 'Copy link') | t }}</button>
+                  <a class="btn small" [href]="r.link" target="_blank" rel="noopener">{{ 'Open' | t }}</a>
                   <details class="more" (toggle)="placeMenu($event)">
-                    <summary class="btn small">More</summary>
+                    <summary class="btn small">{{ 'More' | t }}</summary>
                     <div class="menu">
                       @if (!singleRoom()) {
-                        <button type="button" (click)="startRename(r)">Rename</button>
+                        <button type="button" (click)="startRename(r)">{{ 'Rename' | t }}</button>
                       }
                       @if (r.slug !== 'main') {
                         <button type="button" (click)="toggleVisibility(r)" [disabled]="r.visibility === 'private' && !canPublicFor(r)">
-                          Make {{ r.visibility === 'public' ? 'private' : 'public' }}
+                          {{ (r.visibility === 'public' ? 'Make private' : 'Make public') | t }}
                         </button>
                       }
                       @if (r.visibility === 'private') {
-                        <button type="button" (click)="newLink(r)">New secret link (removes viewers)</button>
+                        <button type="button" (click)="newLink(r)">{{ 'New secret link (removes viewers)' | t }}</button>
                       }
                       @if (r.live) {
-                        <button type="button" (click)="stop(r)">Stop stream</button>
+                        <button type="button" (click)="stop(r)">{{ 'Stop stream' | t }}</button>
                       }
                       @if (r.slug !== 'main') {
-                        <button type="button" class="danger" (click)="remove(r)">Delete room</button>
+                        <button type="button" class="danger" (click)="remove(r)">{{ 'Delete room' | t }}</button>
                       }
                     </div>
                   </details>
@@ -120,7 +120,7 @@ import { absoluteUrl, copyText } from '../../core/util';
               </tr>
             } @empty {
               <tr>
-                <td colspan="5" class="muted">No rooms yet. Create your first one above.</td>
+                <td colspan="5" class="muted">{{ 'No rooms yet. Create your first one above.' | t }}</td>
               </tr>
             }
           </tbody>
@@ -346,7 +346,7 @@ export class Rooms implements OnInit, OnDestroy {
   }
 
   protected async remove(r: RoomView): Promise<void> {
-    if (!(await this.dialog.confirm(`Delete "${r.name}"? Its link stops working.`, { title: 'Delete room', confirmLabel: 'Delete', danger: true }))) return;
+    if (!(await this.dialog.confirm('Delete "{name}"? Its link stops working.', { title: 'Delete room', confirmLabel: 'Delete', danger: true, params: { name: this.i18n.roomName(r) } }))) return;
     return this.act(() => this.api.delete(`/api/rooms/${r.id}`));
   }
 
@@ -355,7 +355,7 @@ export class Rooms implements OnInit, OnDestroy {
       this.copied.set(r.id);
       setTimeout(() => this.copied() === r.id && this.copied.set(null), 1500);
     } else {
-      this.error.set('Could not copy. Link: ' + absoluteUrl(r.link));
+      this.error.set(this.i18n.t('Could not copy. Link: {link}', { link: absoluteUrl(r.link) }));
     }
   }
 }

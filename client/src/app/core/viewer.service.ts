@@ -25,6 +25,7 @@ export class ViewerService {
   readonly connecting = signal(true);
   readonly roomName = signal<string | null>(null);
   readonly ownerName = signal<string | null>(null);
+  readonly autoName = signal(false);
   readonly error = signal<string | null>(null);
   readonly problem = signal<ViewerProblem | null>(null);
   readonly hasAudio = signal(false);
@@ -139,13 +140,14 @@ export class ViewerService {
     const gen = ++this.generation;
     try {
       const joined = await this.sig.request<{
-        room: { name: string; ownerName: string };
+        room: { name: string; ownerName: string; autoName?: boolean };
         live: boolean;
         rtpCapabilities: types.RtpCapabilities;
       }>('joinRoom', { slug: this.slug, key: this.key });
       if (gen !== this.generation) return;
       this.roomName.set(joined.room.name);
       this.ownerName.set(joined.room.ownerName);
+      this.autoName.set(!!joined.room.autoName);
       this.live.set(joined.live);
 
       const device = new Device();

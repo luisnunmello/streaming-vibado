@@ -111,12 +111,17 @@ export interface Preset {
 }
 
 /** One-line description of a set of limits. */
-export function describeLimits(l: Limits): string {
-  const parts = [`${l.maxHeight}p${l.maxFps}`, `${l.maxBitrateMbps} Mbps`, `${l.maxViewersPerRoom} viewers`, `${l.maxRooms} room${l.maxRooms === 1 ? '' : 's'}`];
+export function describeLimits(l: Limits, t: (text: string, params?: Record<string, string | number>) => string = (text, p) => text.replace(/\{(\w+)\}/g, (_, k) => String(p?.[k] ?? ''))): string {
+  const parts = [
+    `${l.maxHeight}p${l.maxFps}`,
+    `${l.maxBitrateMbps} Mbps`,
+    t('{n} viewers', { n: l.maxViewersPerRoom }),
+    t(l.maxRooms === 1 ? '{n} room' : '{n} rooms', { n: l.maxRooms }),
+  ];
   if (l.maxStreamMinutes) parts.push(`${l.maxStreamMinutes} min`);
-  if (l.monthlyGb) parts.push(`${l.monthlyGb} GB/month`);
-  if (!l.allowAudio) parts.push('no audio');
-  if (!l.allowPublicRooms) parts.push('no public rooms');
+  if (l.monthlyGb) parts.push(t('{n} GB/month', { n: l.monthlyGb }));
+  if (!l.allowAudio) parts.push(t('no audio'));
+  if (!l.allowPublicRooms) parts.push(t('no public rooms'));
   return parts.join(' · ');
 }
 

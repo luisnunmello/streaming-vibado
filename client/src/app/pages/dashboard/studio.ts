@@ -14,23 +14,23 @@ import { absoluteUrl, copyText } from '../../core/util';
   imports: [StreamerPanel, RouterLink, TPipe],
   template: `
     <div class="row head">
-      <a routerLink="/dashboard/rooms" class="btn small">← Rooms</a>
+      <a routerLink="/dashboard/rooms" class="btn small">{{ '← Rooms' | t }}</a>
       @if (room(); as r) {
         <h1>{{ i18n.roomName(r) }}</h1>
-        <span class="badge" [class.good]="r.visibility === 'public'">{{ r.visibility }}</span>
+        <span class="badge" [class.good]="r.visibility === 'public'">{{ r.visibility | t }}</span>
         <span class="spacer"></span>
-        <button type="button" class="btn small" (click)="copy(r)">{{ copied() ? 'Copied!' : 'Copy viewer link' }}</button>
-        <button type="button" class="btn small" (click)="viewHere(r)" title="The stream keeps running; the page has streamer controls">View in this tab</button>
-        <a class="btn small" [href]="r.link" target="_blank" rel="noopener" title="In a new tab the page controls this studio tab remotely">Open in new tab ↗</a>
+        <button type="button" class="btn small" (click)="copy(r)">{{ (copied() ? 'Copied!' : 'Copy viewer link') | t }}</button>
+        <button type="button" class="btn small" (click)="viewHere(r)" [title]="'The stream keeps running; the page has streamer controls' | t">{{ 'View in this tab' | t }}</button>
+        <a class="btn small" [href]="r.link" target="_blank" rel="noopener" [title]="'In a new tab the page controls this studio tab remotely' | t">{{ 'Open in new tab ↗' | t }}</a>
       }
     </div>
 
     @if (loading()) {
-      <p class="muted">Joining room…</p>
+      <p class="muted">{{ 'Joining room…' | t }}</p>
     } @else if (error()) {
       <div class="card">
-        <p class="error">{{ error() }}</p>
-        <a routerLink="/dashboard/rooms" class="btn">Back to rooms</a>
+        <p class="error">{{ error() | t }}</p>
+        <a routerLink="/dashboard/rooms" class="btn">{{ 'Back to rooms' | t }}</a>
       </div>
     } @else {
       <app-streamer-panel />

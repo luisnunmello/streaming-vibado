@@ -4,13 +4,15 @@ export function formatBytes(bytes: number): string {
   return `${(bytes / 1e9).toFixed(2)} GB`;
 }
 
-export function timeAgo(ms: number | null): string {
-  if (!ms) return 'never';
+type Translate = (text: string, params?: Record<string, string | number>) => string;
+
+export function timeAgo(ms: number | null, t: Translate = (text, params) => text.replace(/\{(\w+)\}/g, (_, k) => String(params?.[k] ?? ''))): string {
+  if (!ms) return t('never');
   const s = Math.max(0, (Date.now() - ms) / 1000);
-  if (s < 60) return 'just now';
-  if (s < 3600) return `${Math.floor(s / 60)} min ago`;
-  if (s < 86400) return `${Math.floor(s / 3600)} h ago`;
-  return `${Math.floor(s / 86400)} d ago`;
+  if (s < 60) return t('just now');
+  if (s < 3600) return t('{n} min ago', { n: Math.floor(s / 60) });
+  if (s < 86400) return t('{n} h ago', { n: Math.floor(s / 3600) });
+  return t('{n} d ago', { n: Math.floor(s / 86400) });
 }
 
 export function dateShort(ms: number): string {

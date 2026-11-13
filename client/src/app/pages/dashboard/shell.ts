@@ -14,51 +14,51 @@ import { StreamerService } from '../../core/streamer.service';
   imports: [RouterLink, RouterLinkActive, RouterOutlet, Account, Appeal, LangSwitch, TPipe],
   template: `
     <header>
-      <a routerLink="/" class="brand">Streaming</a>
+      <a routerLink="/" class="brand">{{ 'Streaming' | t }}</a>
       <nav>
-        <a routerLink="/dashboard/rooms" routerLinkActive="on">Rooms</a>
+        <a routerLink="/dashboard/rooms" routerLinkActive="on">{{ 'Rooms' | t }}</a>
         @if (auth.isUser() && (auth.me()?.referrals?.quota ?? 0) > 0) {
-          <a routerLink="/dashboard/referrals" routerLinkActive="on">Referrals</a>
+          <a routerLink="/dashboard/referrals" routerLinkActive="on">{{ 'Referrals' | t }}</a>
         }
         @if (auth.isAdmin()) {
-          <a routerLink="/dashboard/users" routerLinkActive="on">Users@if ((auth.me()?.pendingAppeals ?? 0) > 0) { <span class="badge warn" title="Appeals waiting for an answer">{{ auth.me()?.pendingAppeals }}</span> }</a>
-          <a routerLink="/dashboard/presets" routerLinkActive="on">Presets</a>
-          <a routerLink="/dashboard/bandwidth" routerLinkActive="on">Bandwidth</a>
+          <a routerLink="/dashboard/users" routerLinkActive="on">{{ 'Users' | t }}@if ((auth.me()?.pendingAppeals ?? 0) > 0) { <span class="badge warn" [title]="'Appeals waiting for an answer' | t">{{ auth.me()?.pendingAppeals }}</span> }</a>
+          <a routerLink="/dashboard/presets" routerLinkActive="on">{{ 'Presets' | t }}</a>
+          <a routerLink="/dashboard/bandwidth" routerLinkActive="on">{{ 'Bandwidth' | t }}</a>
         }
-        <a routerLink="/dashboard/account" routerLinkActive="on">Account</a>
+        <a routerLink="/dashboard/account" routerLinkActive="on">{{ 'Account' | t }}</a>
       </nav>
       <span class="spacer"></span>
       @if (streamer.state() === 'live' && streamer.room(); as room) {
-        <a [routerLink]="['/dashboard/rooms', room.slug]" class="livechip" title="You are streaming. Click to go back to the studio.">
-          <i></i> LIVE · {{ room.name }}
+        <a [routerLink]="['/dashboard/rooms', room.slug]" class="livechip" [title]="'You are streaming. Click to go back to the studio.' | t">
+          <i></i> {{ 'LIVE' | t }} · {{ liveRoomTitle(room.name) }}
         </a>
       }
       @if (!auth.me()?.restricted) {
-        <button type="button" class="btn small primary" [disabled]="sharing" (click)="share()" title="Go straight to your studio and pick a screen to share">{{ 'Share screen' | t }}</button>
+        <button type="button" class="btn small primary" [disabled]="sharing" (click)="share()" [title]="'Go straight to your studio and pick a screen to share' | t">{{ 'Share screen' | t }}</button>
       }
-      <a routerLink="/lobbies" class="link">Public rooms</a>
+      <a routerLink="/lobbies" class="link">{{ 'Public rooms' | t }}</a>
       <app-lang-switch />
-      <span class="who">{{ auth.me()?.name }} <span class="badge">{{ auth.me()?.role }}</span></span>
-      <button type="button" class="btn small" (click)="logout()">Sign out</button>
+      <span class="who">{{ auth.me()?.name }} <span class="badge">{{ auth.me()?.role | t }}</span></span>
+      <button type="button" class="btn small" (click)="logout()">{{ 'Sign out' | t }}</button>
     </header>
     @if (auth.adminBackup()) {
       <div class="usingbar" role="status">
-        <span>Using the account of <b>{{ auth.me()?.name }}</b> (admin debug mode). Everything you do here counts as that user.</span>
-        <button type="button" class="btn small" (click)="returnToAdmin()">Return to admin</button>
+        <span>{{ 'Using the account of' | t }} <b>{{ auth.me()?.name }}</b> {{ '(admin debug mode). Everything you do here counts as that user.' | t }}</span>
+        <button type="button" class="btn small" (click)="returnToAdmin()">{{ 'Return to admin' | t }}</button>
       </div>
     }
     <main class="page">
       @if (auth.me()?.restricted) {
         <div class="restricted" role="alert">
-          <b>Your account is restricted.</b> You cannot use this website right now.
-          <p>Reason: {{ auth.me()?.restrictedReason || 'No reason was given.' }}</p>
-          <p class="small">Contact the administrator if you think this is a mistake. You can still change your name and password and sign out.</p>
+          <b>{{ 'Your account is restricted.' | t }}</b> {{ 'You cannot use this website right now.' | t }}
+          <p>{{ 'Reason:' | t }} {{ auth.me()?.restrictedReason || ('No reason was given.' | t) }}</p>
+          <p class="small">{{ 'Contact the administrator if you think this is a mistake. You can still change your name and password and sign out.' | t }}</p>
         </div>
         <div class="tabs" role="tablist">
           <button type="button" role="tab" [class.on]="tab === 'appeal'" (click)="tab = 'appeal'">
-            Appeal @if (auth.me()?.appealStatus === 'pending') { <span class="badge warn">sent</span> }
+            {{ 'Appeal' | t }} @if (auth.me()?.appealStatus === 'pending') { <span class="badge warn">{{ 'sent' | t }}</span> }
           </button>
-          <button type="button" role="tab" [class.on]="tab === 'account'" (click)="tab = 'account'">Account</button>
+          <button type="button" role="tab" [class.on]="tab === 'account'" (click)="tab = 'account'">{{ 'Account' | t }}</button>
         </div>
         @if (tab === 'appeal') {
           <app-appeal />
@@ -215,6 +215,12 @@ export class Shell implements OnInit, OnDestroy {
   }
 
   protected tab: 'appeal' | 'account' = 'appeal';
+
+  /** A room named after its owner ("fernando's room") reads in the current language. */
+  protected liveRoomTitle(name: string): string {
+    const me = this.auth.me()?.name ?? '';
+    return this.i18n.roomName({ name, ownerName: me, autoName: name === `${me}'s room` });
+  }
   protected sharing = false;
   private readonly shareSvc = inject(ShareService);
   private readonly dialog = inject(DialogService);

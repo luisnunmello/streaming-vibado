@@ -1,4 +1,5 @@
 import { Component, inject, signal } from '@angular/core';
+import { TPipe } from '../core/i18n.service';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { AuthService } from '../core/auth.service';
@@ -6,27 +7,27 @@ import { Topbar } from '../shared/topbar';
 
 @Component({
   selector: 'app-login',
-  imports: [FormsModule, RouterLink, Topbar],
+  imports: [FormsModule, RouterLink, Topbar, TPipe],
   template: `
     <app-topbar />
     <main class="center">
       <form class="card box" (ngSubmit)="submit()">
-        <h1>Sign in</h1>
-        <p class="muted">Users use the name they were given. The administrator signs in as <b>admin</b>.</p>
+        <h1>{{ 'Sign in' | t }}</h1>
+        <p class="muted">{{ 'Users use the name they were given. The administrator signs in as' | t }} <b>{{ 'admin' | t }}</b>.</p>
         <div class="field">
-          <label for="name">Name</label>
+          <label for="name">{{ 'Name' | t }}</label>
           <input id="name" type="text" name="name" [(ngModel)]="name" autocomplete="username" autofocus required />
         </div>
         <div class="field">
-          <label for="pw">Password</label>
+          <label for="pw">{{ 'Password' | t }}</label>
           <input id="pw" type="password" name="pw" [(ngModel)]="password" autocomplete="current-password" required />
         </div>
-        <label class="check remember"><input type="checkbox" name="remember" [(ngModel)]="remember" /> Remember me (stay signed in for 30 days)</label>
-        <button class="btn primary wide" type="submit" [disabled]="busy() || !name || !password">Sign in</button>
+        <label class="check remember"><input type="checkbox" name="remember" [(ngModel)]="remember" /> {{ 'Remember me (stay signed in for 30 days)' | t }}</label>
+        <button class="btn primary wide" type="submit" [disabled]="busy() || !name || !password">{{ 'Sign in' | t }}</button>
         @if (error()) {
-          <p class="error">{{ error() }}</p>
+          <p class="error">{{ error() | t }}</p>
         }
-        <p class="alt">Have an invite key? <a routerLink="/activate">Activate your account</a></p>
+        <p class="alt">{{ 'Have an invite key?' | t }} <a routerLink="/activate">{{ 'Activate your account' | t }}</a></p>
       </form>
     </main>
   `,

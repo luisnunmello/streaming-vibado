@@ -1,35 +1,37 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
+import { TPipe } from '../../core/i18n.service';
 import { ApiService } from '../../core/api.service';
 import type { ReferralKey } from '../../core/models';
 import { absoluteUrl, copyText, dateShort } from '../../core/util';
 
 @Component({
+  imports: [TPipe],
   selector: 'app-referrals',
   template: `
-    <h1 class="page-title">Referrals</h1>
+    <h1 class="page-title">{{ 'Referrals' | t }}</h1>
     <div class="card">
       <div class="row">
         <div>
-          <b>{{ quota() - used() }}</b> of {{ quota() }} referrals left
-          <div class="muted hint">Each key lets one person create an account. People you invite cannot invite others.</div>
+          {{ '{left} of {total} referrals left' | t: { left: quota() - used(), total: quota() } }}
+          <div class="muted hint">{{ 'Each key lets one person create an account. People you invite cannot invite others.' | t }}</div>
         </div>
         <span class="spacer"></span>
-        <button type="button" class="btn primary" (click)="create()" [disabled]="busy() || used() >= quota()">Create referral key</button>
+        <button type="button" class="btn primary" (click)="create()" [disabled]="busy() || used() >= quota()">{{ 'Create referral key' | t }}</button>
       </div>
 
       @if (fresh(); as f) {
         <div class="keybox new">
           <div>
-            <div class="muted hint">Shown only now. Send the link or the key to the person you invite.</div>
+            <div class="muted hint">{{ 'Shown only now. Send the link or the key to the person you invite.' | t }}</div>
             <code>{{ f.key }}</code>
           </div>
           <span class="spacer"></span>
-          <button type="button" class="btn small" (click)="copy(f.key)">Copy key</button>
-          <button type="button" class="btn small" (click)="copy(absolute(f.link))">{{ copied() ? 'Copied!' : 'Copy link' }}</button>
+          <button type="button" class="btn small" (click)="copy(f.key)">{{ 'Copy key' | t }}</button>
+          <button type="button" class="btn small" (click)="copy(absolute(f.link))">{{ (copied() ? 'Copied!' : 'Copy link') | t }}</button>
         </div>
       }
       @if (error()) {
-        <p class="error">{{ error() }}</p>
+        <p class="error">{{ error() | t }}</p>
       }
     </div>
 
@@ -37,25 +39,25 @@ import { absoluteUrl, copyText, dateShort } from '../../core/util';
       <div class="table-wrap">
         <table class="list">
           <thead>
-            <tr><th>Key</th><th>Status</th><th>Expires</th><th>Used by</th><th></th></tr>
+            <tr><th>{{ 'Key' | t }}</th><th>{{ 'Status' | t }}</th><th>{{ 'Expires' | t }}</th><th>{{ 'Used by' | t }}</th><th></th></tr>
           </thead>
           <tbody>
             @for (k of keys(); track k.id) {
               <tr>
                 <td><code>••••-••••-••••-{{ k.hint }}</code></td>
                 <td>
-                  <span class="badge" [class.good]="k.status === 'used'" [class.warn]="k.status === 'unused'" [class.bad]="k.status === 'revoked' || k.status === 'expired'">{{ k.status }}</span>
+                  <span class="badge" [class.good]="k.status === 'used'" [class.warn]="k.status === 'unused'" [class.bad]="k.status === 'revoked' || k.status === 'expired'">{{ k.status | t }}</span>
                 </td>
                 <td class="muted">{{ k.status === 'unused' ? dateShort(k.expiresAt) : '' }}</td>
                 <td>{{ k.usedBy ?? '' }}</td>
                 <td class="right">
                   @if (k.status === 'unused') {
-                    <button type="button" class="btn small" (click)="revoke(k)">Revoke</button>
+                    <button type="button" class="btn small" (click)="revoke(k)">{{ 'Revoke' | t }}</button>
                   }
                 </td>
               </tr>
             } @empty {
-              <tr><td colspan="5" class="muted">You haven't created any referral keys yet.</td></tr>
+              <tr><td colspan="5" class="muted">{{ "You haven't created any referral keys yet." | t }}</td></tr>
             }
           </tbody>
         </table>

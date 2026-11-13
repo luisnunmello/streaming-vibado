@@ -1,4 +1,5 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
+import { TPipe } from '../core/i18n.service';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { ApiService } from '../core/api.service';
@@ -7,51 +8,51 @@ import { Topbar } from '../shared/topbar';
 
 @Component({
   selector: 'app-activate',
-  imports: [FormsModule, RouterLink, Topbar],
+  imports: [FormsModule, RouterLink, Topbar, TPipe],
   template: `
     <app-topbar />
     <main class="center">
       @if (step() === 'key') {
         <form class="card box" (ngSubmit)="check()">
-          <h1>Activate your account</h1>
-          <p class="muted">Enter the key you received from the administrator or from a friend who invited you.</p>
+          <h1>{{ 'Activate your account' | t }}</h1>
+          <p class="muted">{{ 'Enter the key you received from the administrator or from a friend who invited you.' | t }}</p>
           <div class="field">
-            <label for="key">Key</label>
-            <input id="key" type="text" name="key" [(ngModel)]="key" placeholder="XXXX-XXXX-XXXX-XXXX" autocomplete="off" autofocus required />
+            <label for="key">{{ 'Key' | t }}</label>
+            <input id="key" type="text" name="key" [(ngModel)]="key" [placeholder]="'XXXX-XXXX-XXXX-XXXX' | t" autocomplete="off" autofocus required />
           </div>
-          <button class="btn primary wide" type="submit" [disabled]="busy() || !key">Continue</button>
+          <button class="btn primary wide" type="submit" [disabled]="busy() || !key">{{ 'Continue' | t }}</button>
           @if (error()) {
-            <p class="error">{{ error() }}</p>
+            <p class="error">{{ error() | t }}</p>
           }
-          <p class="alt">Already have an account? <a routerLink="/login">Sign in</a></p>
+          <p class="alt">{{ 'Already have an account?' | t }} <a routerLink="/login">{{ 'Sign in' | t }}</a></p>
         </form>
       } @else {
         <form class="card box" (ngSubmit)="finish()">
-          <h1>{{ kind() === 'activation' ? 'Welcome, ' + fixedName() : 'Create your account' }}</h1>
+          <h1>{{ kind() === 'activation' ? ('Welcome, {name}' | t: { name: fixedName() }) : ('Create your account' | t) }}</h1>
           <p class="muted">
             @if (kind() === 'activation') {
-              Choose a password to finish activating your account.
+              {{ 'Choose a password to finish activating your account.' | t }}
             } @else {
-              Pick a name and a password. You'll use them to sign in.
+              {{ "Pick a name and a password. You'll use them to sign in." | t }}
             }
           </p>
           @if (kind() === 'referral') {
             <div class="field">
-              <label for="name">Name <small>(3-24 letters, digits, _ or -)</small></label>
+              <label for="name">{{ 'Name' | t }} <small>{{ '(3-24 letters, digits, _ or -)' | t }}</small></label>
               <input id="name" type="text" name="name" [(ngModel)]="name" autocomplete="username" required />
             </div>
           }
           <div class="field">
-            <label for="pw">Password <small>(min. 8 characters)</small></label>
+            <label for="pw">{{ 'Password' | t }} <small>{{ '(min. 8 characters)' | t }}</small></label>
             <input id="pw" type="password" name="pw" [(ngModel)]="password" autocomplete="new-password" required minlength="8" />
           </div>
           <div class="field">
-            <label for="pw2">Repeat password</label>
+            <label for="pw2">{{ 'Repeat password' | t }}</label>
             <input id="pw2" type="password" name="pw2" [(ngModel)]="repeat" autocomplete="new-password" required />
           </div>
-          <button class="btn primary wide" type="submit" [disabled]="busy() || !password || !repeat || (kind() === 'referral' && !name)">Activate</button>
+          <button class="btn primary wide" type="submit" [disabled]="busy() || !password || !repeat || (kind() === 'referral' && !name)">{{ 'Activate' | t }}</button>
           @if (error()) {
-            <p class="error">{{ error() }}</p>
+            <p class="error">{{ error() | t }}</p>
           }
         </form>
       }

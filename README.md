@@ -61,6 +61,9 @@ Keys are stored hashed, so they cannot be shown again after creation. Activation
 - A room has a stable address and exists until its owner deletes it; it is "live" while the owner streams.
 - **Public** rooms are listed in `/lobbies`. **Private** rooms are unlisted and reachable only through their **secret link**. Generating a new link kills the old one and removes current viewers.
 - The owner (or the admin) can rename, change visibility, stop a stream, or delete the room. The admin can manage every room.
+- **One room only:** a user whose limit is a single room does not name it: it is "<name>'s room" and follows the user's name if they change it. Only its privacy is configurable.
+- **Share screen:** the button in the header and on the Rooms page goes straight to the studio of your room (the last one you used, or your first one, which is created for you if you have none) and opens the screen picker. If the browser no longer counts the click as a gesture, use the Start button.
+- **Languages:** the interface is available in English and Portuguese (EN / PT switch in the header; the choice is remembered, and the browser language is the default). Translations live in `client/src/app/core/i18n-pt.ts`, keyed by the English text, so a missing entry simply shows in English.
 
 ## Limits and bandwidth protection
 

@@ -1,4 +1,5 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
+import { I18nService, TPipe } from '../../core/i18n.service';
 import { FormsModule } from '@angular/forms';
 import { ApiService } from '../../core/api.service';
 import { DialogService } from '../../core/dialog.service';
@@ -8,64 +9,63 @@ import { Modal } from '../../shared/modal';
 
 @Component({
   selector: 'app-presets',
-  imports: [FormsModule, LimitsEditor, Modal],
+  imports: [FormsModule, LimitsEditor, Modal, TPipe],
   template: `
     <div class="head">
-      <h1 class="page-title">Limit presets</h1>
-      <button type="button" class="btn primary" (click)="openCreate()">New preset</button>
+      <h1 class="page-title">{{ 'Limit presets' | t }}</h1>
+      <button type="button" class="btn primary" (click)="openCreate()">{{ 'New preset' | t }}</button>
     </div>
     <p class="intro muted">
-      A preset is a named set of limits. Give a preset to users and they follow it: when you change the preset, every user on it
-      gets the new limits immediately, including in their open studio.
+      {{ 'A preset is a named set of limits. Give a preset to users and they follow it: when you change the preset, every user on it gets the new limits immediately, including in their open studio.' | t }}
     </p>
 
-    <app-modal [open]="createOpen()" [wide]="true" [title]="cloneOf() ? 'Clone preset' : 'New preset'" (closed)="createOpen.set(false)">
+    <app-modal [open]="createOpen()" [wide]="true" [title]="(cloneOf() ? 'Clone preset' : 'New preset') | t" (closed)="createOpen.set(false)">
       <form (ngSubmit)="create()">
         <div class="row">
           <div class="field grow">
-            <label for="pname">Name</label>
-            <input id="pname" type="text" name="pname" [(ngModel)]="newName" maxlength="40" placeholder="e.g. Friends, Trusted, Small" required />
+            <label for="pname">{{ 'Name' | t }}</label>
+            <input id="pname" type="text" name="pname" [(ngModel)]="newName" maxlength="40" [placeholder]="'e.g. Friends, Trusted, Small' | t" required />
           </div>
-          <label class="check"><input type="checkbox" name="pdef" [(ngModel)]="newDefault" /> Use for new users</label>
+          <label class="check"><input type="checkbox" name="pdef" [(ngModel)]="newDefault" /> {{ 'Use for new users' | t }}</label>
         </div>
         @if (cloneOf(); as c) {
-          <p class="muted hint">Starts as a copy of <b>{{ c.name }}</b>. Change anything you like.</p>
+          <p class="muted hint">{{ 'Starts as a copy of' | t }} <b>{{ c.name }}</b>{{ '. Change anything you like.' | t }}</p>
         }
         @if (newLimits(); as l) {
           <app-limits-editor [limits]="l" (limitsChange)="newLimits.set($event)" />
         }
         @if (error()) {
-          <p class="error">{{ error() }}</p>
+          <p class="error">{{ error() | t }}</p>
         }
         <div class="modal-actions">
-          <button class="btn" type="button" (click)="createOpen.set(false)">Cancel</button>
-          <button class="btn primary" type="submit" [disabled]="busy() || !newName.trim()">Create preset</button>
+          <button class="btn" type="button" (click)="createOpen.set(false)">{{ 'Cancel' | t }}</button>
+          <button class="btn primary" type="submit" [disabled]="busy() || !newName.trim()">{{ 'Create preset' | t }}</button>
         </div>
       </form>
     </app-modal>
 
     @if (error() && !createOpen()) {
-      <p class="error">{{ error() }}</p>
+      <p class="error">{{ error() | t }}</p>
     }
 
     <div class="card">
       <div class="table-wrap">
         <table class="list">
-          <thead><tr><th>Preset</th><th>Limits</th><th>Users</th><th></th></tr></thead>
+          <thead><tr><th>{{ 'Preset' | t }}</th><th>{{ 'Limits' | t }}</th><th>{{ 'Users' | t }}</th><th></th></tr></thead>
           <tbody>
             @for (p of presets(); track p.id) {
               <tr>
                 <td>
                   <b>{{ p.name }}</b>
                   @if (p.isDefault) {
-                    <span class="badge good" title="New users and invited users start on this preset">default</span>
+                    <span class="badge good" [title]="'New users and invited users start on this preset' | t">{{ 'default' | t }}</span>
                   }
                 </td>
                 <td class="muted summary">{{ describe(p.limits) }}</td>
                 <td>{{ p.userCount }}</td>
                 <td class="right">
-                  <button type="button" class="btn small" (click)="openCreate(p)">Clone</button>
-                  <button type="button" class="btn small" (click)="toggleEdit(p)">{{ editing()?.id === p.id ? 'Close' : 'Edit' }}</button>
+                  <button type="button" class="btn small" (click)="openCreate(p)">{{ 'Clone' | t }}</button>
+                  <button type="button" class="btn small" (click)="toggleEdit(p)">{{ (editing()?.id === p.id ? 'Close' : 'Edit') | t }}</button>
                 </td>
               </tr>
               @if (editing(); as e) {
@@ -73,7 +73,7 @@ import { Modal } from '../../shared/modal';
                   <tr class="edit">
                     <td colspan="4">
                       <div class="field narrow">
-                        <label [for]="'n' + p.id">Name</label>
+                        <label [for]="'n' + p.id">{{ 'Name' | t }}</label>
                         <input [id]="'n' + p.id" type="text" maxlength="40" [value]="editName()" (input)="editName.set($any($event.target).value)" />
                       </div>
                       @if (editLimits(); as l) {
@@ -81,17 +81,17 @@ import { Modal } from '../../shared/modal';
                       }
                       <p class="muted hint">
                         @if (p.userCount > 0) {
-                          Saving updates {{ p.userCount }} user{{ p.userCount === 1 ? '' : 's' }} right away.
+                          {{ (p.userCount === 1 ? 'Saving updates {n} user right away.' : 'Saving updates {n} users right away.') | t: { n: p.userCount } }}
                         } @else {
-                          No user is on this preset yet.
+                          {{ 'No user is on this preset yet.' | t }}
                         }
                       </p>
                       <div class="row actions">
-                        <button type="button" class="btn primary small" (click)="save(p)">Save changes</button>
+                        <button type="button" class="btn primary small" (click)="save(p)">{{ 'Save changes' | t }}</button>
                         <span class="spacer"></span>
                         @if (!p.isDefault) {
-                          <button type="button" class="btn small" (click)="makeDefault(p)">Use for new users</button>
-                          <button type="button" class="btn small danger" (click)="remove(p)">Delete</button>
+                          <button type="button" class="btn small" (click)="makeDefault(p)">{{ 'Use for new users' | t }}</button>
+                          <button type="button" class="btn small danger" (click)="remove(p)">{{ 'Delete' | t }}</button>
                         }
                       </div>
                     </td>
@@ -99,7 +99,7 @@ import { Modal } from '../../shared/modal';
                 }
               }
             } @empty {
-              <tr><td colspan="4" class="muted">No presets.</td></tr>
+              <tr><td colspan="4" class="muted">{{ 'No presets.' | t }}</td></tr>
             }
           </tbody>
         </table>
@@ -158,6 +158,7 @@ import { Modal } from '../../shared/modal';
 export class Presets implements OnInit {
   private readonly api = inject(ApiService);
   private readonly dialog = inject(DialogService);
+  protected readonly i18n = inject(I18nService);
   protected readonly presets = signal<Preset[]>([]);
   protected readonly error = signal<string | null>(null);
   protected readonly busy = signal(false);
@@ -169,7 +170,7 @@ export class Presets implements OnInit {
   protected readonly newLimits = signal<Limits | null>(null);
   protected newName = '';
   protected newDefault = false;
-  protected readonly describe = describeLimits;
+  protected readonly describe = (l: Limits): string => describeLimits(l, (text, params) => this.i18n.t(text, params));
 
   async ngOnInit(): Promise<void> {
     await this.load();
@@ -199,7 +200,7 @@ export class Presets implements OnInit {
   protected openCreate(from?: Preset): void {
     const base = from ?? this.presets().find((p) => p.isDefault);
     this.cloneOf.set(from ?? null);
-    this.newName = from ? `${from.name} copy`.slice(0, 40) : '';
+    this.newName = from ? this.i18n.t('{name} copy', { name: from.name }).slice(0, 40) : '';
     this.newDefault = false;
     if (base) this.newLimits.set({ ...base.limits });
     this.error.set(null);
@@ -242,11 +243,8 @@ export class Presets implements OnInit {
   }
 
   protected async remove(p: Preset): Promise<void> {
-    const msg =
-      p.userCount > 0
-        ? `Delete "${p.name}"? Its ${p.userCount} user(s) keep their current limits as custom limits.`
-        : `Delete "${p.name}"?`;
-    if (!(await this.dialog.confirm(msg, { title: 'Delete preset', confirmLabel: 'Delete', danger: true }))) return;
+    const msg = p.userCount > 0 ? 'Delete "{name}"? Its {n} user(s) keep their current limits as custom limits.' : 'Delete "{name}"?';
+    if (!(await this.dialog.confirm(msg, { title: 'Delete preset', confirmLabel: 'Delete', danger: true, params: { name: p.name, n: p.userCount } }))) return;
     return this.act(async () => {
       await this.api.delete(`/api/admin/presets/${p.id}`);
       this.editing.set(null);

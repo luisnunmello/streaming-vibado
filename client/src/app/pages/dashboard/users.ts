@@ -1,4 +1,5 @@
 import { Component, OnDestroy, OnInit, computed, inject, signal } from '@angular/core';
+import { I18nService, TPipe } from '../../core/i18n.service';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { AuthService } from '../../core/auth.service';
@@ -21,91 +22,91 @@ const CUSTOM = 'custom';
 
 @Component({
   selector: 'app-users',
-  imports: [FormsModule, LimitsEditor, Modal, RouterLink],
+  imports: [FormsModule, LimitsEditor, Modal, RouterLink, TPipe],
   template: `
     <div class="head">
-      <h1 class="page-title">Users</h1>
-      <button type="button" class="btn primary" (click)="openNew()">New user</button>
+      <h1 class="page-title">{{ 'Users' | t }}</h1>
+      <button type="button" class="btn primary" (click)="openNew()">{{ 'New user' | t }}</button>
     </div>
 
-    <app-modal [open]="newOpen()" [wide]="true" title="New user" (closed)="newOpen.set(false)">
+    <app-modal [open]="newOpen()" [wide]="true" [title]="'New user' | t" (closed)="newOpen.set(false)">
       <form (ngSubmit)="create()">
         <div class="row">
           <div class="field grow">
-            <label for="uname">Name</label>
-            <input id="uname" type="text" name="uname" [(ngModel)]="newName" maxlength="24" placeholder="e.g. maria" required />
+            <label for="uname">{{ 'Name' | t }}</label>
+            <input id="uname" type="text" name="uname" [(ngModel)]="newName" maxlength="24" [placeholder]="'e.g. maria' | t" required />
           </div>
           <div class="field">
-            <label for="uref">Referrals</label>
+            <label for="uref">{{ 'Referrals' | t }}</label>
             <input id="uref" type="number" name="uref" min="0" max="1000" [(ngModel)]="newReferrals" />
           </div>
           <div class="field">
-            <label for="upre">Limits</label>
+            <label for="upre">{{ 'Limits' | t }}</label>
             <select id="upre" name="upre" [ngModel]="newChoice()" (ngModelChange)="chooseNew($event)">
               @for (p of presets(); track p.id) {
-                <option [value]="p.id">{{ p.name }}{{ p.isDefault ? ' (default)' : '' }}</option>
+                <option [value]="p.id">{{ p.name }}{{ p.isDefault ? (' (default)' | t) : '' }}</option>
               }
-              <option [value]="custom">Custom…</option>
+              <option [value]="custom">{{ 'Custom…' | t }}</option>
             </select>
           </div>
         </div>
         @if (presetOf(newChoice()); as p) {
-          <p class="muted hint">Follows <b>{{ p.name }}</b>. Change any value below to stop following it. <a routerLink="/dashboard/presets">Manage presets</a></p>
+          <p class="muted hint">{{ 'Follows' | t }} <b>{{ p.name }}</b>{{ '. Change any value below to stop following it.' | t }} <a routerLink="/dashboard/presets">{{ 'Manage presets' | t }}</a></p>
         }
         @if (newLimits(); as l) {
           <app-limits-editor [limits]="l" (limitsChange)="editNew($event)" />
         }
         @if (error()) {
-          <p class="error">{{ error() }}</p>
+          <p class="error">{{ error() | t }}</p>
         }
         <div class="modal-actions">
-          <button class="btn" type="button" (click)="newOpen.set(false)">Cancel</button>
-          <button class="btn primary" type="submit" [disabled]="busy() || !newName.trim()">Create and generate key</button>
+          <button class="btn" type="button" (click)="newOpen.set(false)">{{ 'Cancel' | t }}</button>
+          <button class="btn primary" type="submit" [disabled]="busy() || !newName.trim()">{{ 'Create and generate key' | t }}</button>
         </div>
       </form>
     </app-modal>
 
     @if (error() && !newOpen()) {
-      <p class="error">{{ error() }}</p>
+      <p class="error">{{ error() | t }}</p>
     }
 
     @if (reveal(); as r) {
       <div class="card reveal">
         <h2>{{ r.title }}</h2>
-        <p class="muted">This key is shown only once and expires in 7 days. Send it to the person (the link opens the activation page with the key filled in).</p>
+        <p class="muted">{{ 'This key is shown only once and expires in 7 days. Send it to the person (the link opens the activation page with the key filled in).' | t }}</p>
         <div class="keybox">
           <code>{{ r.key }}</code>
           <span class="spacer"></span>
-          <button type="button" class="btn small" (click)="copy(r.key, 'key')">{{ copied() === 'key' ? 'Copied!' : 'Copy key' }}</button>
-          <button type="button" class="btn small" (click)="copy(absolute(r.link), 'link')">{{ copied() === 'link' ? 'Copied!' : 'Copy link' }}</button>
-          <button type="button" class="btn small" (click)="reveal.set(null)">Hide</button>
+          <button type="button" class="btn small" (click)="copy(r.key, 'key')">{{ (copied() === 'key' ? 'Copied!' : 'Copy key') | t }}</button>
+          <button type="button" class="btn small" (click)="copy(absolute(r.link), 'link')">{{ (copied() === 'link' ? 'Copied!' : 'Copy link') | t }}</button>
+          <button type="button" class="btn small" (click)="reveal.set(null)">{{ 'Hide' | t }}</button>
         </div>
       </div>
     }
 
     @if (selected().size > 0) {
       <div class="card bulk">
-        <h2>{{ selected().size }} selected</h2>
+        <h2>{{ '{n} selected' | t: { n: selected().size } }}</h2>
         <div class="row">
           <div class="field narrow">
-            <label for="bpre">Apply limits</label>
+            <label for="bpre">{{ 'Apply limits' | t }}</label>
             <select id="bpre" [value]="bulkChoice()" (change)="chooseBulk($any($event.target).value)">
               @for (p of presets(); track p.id) {
-                <option [value]="p.id" [selected]="bulkChoice() === '' + p.id">{{ p.name }}{{ p.isDefault ? ' (default)' : '' }}</option>
+                <option [value]="p.id" [selected]="bulkChoice() === '' + p.id">{{ p.name }}{{ p.isDefault ? (' (default)' | t) : '' }}</option>
               }
-              <option [value]="custom" [selected]="bulkChoice() === custom">Custom…</option>
+              <option [value]="custom" [selected]="bulkChoice() === custom">{{ 'Custom…' | t }}</option>
             </select>
           </div>
         </div>
         @if (presetOf(bulkChoice()); as p) {
-          <p class="muted hint">The selected users will follow <b>{{ p.name }}</b> from now on. Change any value below to give them custom limits instead.</p>
+          <p class="muted hint">{{ 'The selected users will follow' | t }} <b>{{ p.name }}</b> {{ 'from now on. Change any value below to give them custom limits instead.' | t }}</p>
         }
         @if (bulkLimits(); as l) {
           <app-limits-editor [limits]="l" (limitsChange)="editBulk($event)" />
         }
         <div class="row actions">
-          <button type="button" class="btn primary small" [disabled]="busy()" (click)="applyBulk()">Apply to {{ selected().size }} user(s)</button>
-          <button type="button" class="btn small" (click)="selected.set(emptySet)">Clear selection</button>
+          <button type="button" class="btn primary small" [disabled]="busy()" (click)="applyBulk()">{{ 'Apply to {n} user(s)' | t: { n: selected().size } }}</button>
+          <button type="button" class="btn small" (click)="selected.set(emptySet)">{{ 'Clear selection' | t }}</button>
         </div>
         @if (bulkMessage()) {
           <p class="muted hint">{{ bulkMessage() }}</p>
@@ -118,7 +119,7 @@ const CUSTOM = 'custom';
         <table class="list">
           <thead>
             <tr>
-              <th class="chk"><input type="checkbox" aria-label="Select all users" [checked]="allSelected()" (change)="toggleAll($any($event.target).checked)" /></th><th>User</th><th>Status</th><th>Limits</th><th>Referred by</th><th>Rooms</th><th>Referrals</th><th>This month</th><th>Last seen</th><th></th>
+              <th class="chk"><input type="checkbox" [attr.aria-label]="'Select all users' | t" [checked]="allSelected()" (change)="toggleAll($any($event.target).checked)" /></th><th>{{ 'User' | t }}</th><th>{{ 'Status' | t }}</th><th>{{ 'Limits' | t }}</th><th>{{ 'Referred by' | t }}</th><th>{{ 'Rooms' | t }}</th><th>{{ 'Referrals' | t }}</th><th>{{ 'This month' | t }}</th><th>{{ 'Last seen' | t }}</th><th></th>
             </tr>
           </thead>
           <tbody>
@@ -128,27 +129,27 @@ const CUSTOM = 'custom';
                 <td><b>{{ u.name }}</b></td>
                 <td>
                   @if (u.restricted) {
-                    <span class="badge bad" [title]="u.restrictedReason">restricted</span>
+                    <span class="badge bad" [title]="u.restrictedReason">{{ 'restricted' | t }}</span>
                   }
                   @if (u.appealStatus === 'pending') {
-                    <span class="badge warn" title="This user appealed their restriction. Open Edit to read it.">appeal</span>
+                    <span class="badge warn" [title]="'This user appealed their restriction. Open Edit to read it.' | t">{{ 'appeal' | t }}</span>
                   }
-                  <span class="badge" [class.good]="u.status === 'active'" [class.warn]="u.status === 'pending'" [class.bad]="u.status === 'disabled'">{{ u.status }}</span>
+                  <span class="badge" [class.good]="u.status === 'active'" [class.warn]="u.status === 'pending'" [class.bad]="u.status === 'disabled'">{{ u.status | t }}</span>
                 </td>
                 <td>
                   @if (u.presetName) {
                     <span class="badge">{{ u.presetName }}</span>
                   } @else {
-                    <span class="badge warn" title="Not following a preset">custom</span>
+                    <span class="badge warn" [title]="'Not following a preset' | t">{{ 'custom' | t }}</span>
                   }
                 </td>
-                <td class="muted">{{ u.invitedByName ?? 'Admin' }}</td>
-                <td>{{ u.rooms }}@if (u.liveRooms) { <span class="badge live">{{ u.liveRooms }} live</span> }</td>
+                <td class="muted">{{ (u.invitedByName ?? 'Admin') | t }}</td>
+                <td>{{ u.rooms }}@if (u.liveRooms) { <span class="badge live">{{ '{n} live' | t: { n: u.liveRooms } }}</span> }</td>
                 <td>{{ u.referralsUsed }} / {{ u.referralQuota }}</td>
                 <td>{{ fmt(u.monthBytes) }}</td>
-                <td class="muted">{{ u.status === 'pending' ? 'not activated' : ago(u.lastSeen) }}</td>
+                <td class="muted">{{ u.status === 'pending' ? ('not activated' | t) : ago(u.lastSeen) }}</td>
                 <td class="right">
-                  <button type="button" class="btn small" (click)="toggleEdit(u)">{{ editing()?.id === u.id ? 'Close' : 'Edit' }}</button>
+                  <button type="button" class="btn small" (click)="toggleEdit(u)">{{ (editing()?.id === u.id ? 'Close' : 'Edit') | t }}</button>
                 </td>
               </tr>
               @if (editing(); as e) {
@@ -157,139 +158,139 @@ const CUSTOM = 'custom';
                     <td colspan="10">
                       <div class="row">
                         <div class="field narrow">
-                          <label [for]="'q' + u.id">Referrals this user may create</label>
+                          <label [for]="'q' + u.id">{{ 'Referrals this user may create' | t }}</label>
                           <input [id]="'q' + u.id" type="number" min="0" max="1000" [value]="editQuota()" (input)="editQuota.set(+$any($event.target).value)" />
                         </div>
                         <div class="field narrow">
-                          <label [for]="'p' + u.id">Limits</label>
+                          <label [for]="'p' + u.id">{{ 'Limits' | t }}</label>
                           <select [id]="'p' + u.id" [value]="editChoice()" (change)="chooseEdit($any($event.target).value)">
                             @for (p of presets(); track p.id) {
-                              <option [value]="p.id" [selected]="editChoice() === '' + p.id">{{ p.name }}{{ p.isDefault ? ' (default)' : '' }}</option>
+                              <option [value]="p.id" [selected]="editChoice() === '' + p.id">{{ p.name }}{{ p.isDefault ? (' (default)' | t) : '' }}</option>
                             }
-                            <option [value]="custom" [selected]="editChoice() === custom">Custom…</option>
+                            <option [value]="custom" [selected]="editChoice() === custom">{{ 'Custom…' | t }}</option>
                           </select>
                         </div>
                       </div>
                       @if (presetOf(editChoice()); as p) {
                         <p class="muted hint">
-                          Follows <b>{{ p.name }}</b>: changing the preset changes this user too. Change any value below to stop following it.
+                          {{ 'Follows' | t }} <b>{{ p.name }}</b>{{ ': changing the preset changes this user too. Change any value below to stop following it.' | t }}
                         </p>
                       }
                       @if (editLimits(); as l) {
                         <app-limits-editor [limits]="l" (limitsChange)="editUser($event)" />
                       }
                       @if (u.invitedByName) {
-                        <p class="muted hint">Referred by {{ u.invitedByName }}, so these limits can never go above theirs.</p>
+                        <p class="muted hint">{{ 'Referred by {name}, so these limits can never go above theirs.' | t: { name: u.invitedByName } }}</p>
                       }
                       <div class="row actions">
-                        <button type="button" class="btn primary small" (click)="save(u)">Save changes</button>
+                        <button type="button" class="btn primary small" (click)="save(u)">{{ 'Save changes' | t }}</button>
                         <span class="spacer"></span>
-                        <button type="button" class="btn small" (click)="reissue(u)">{{ u.status === 'pending' ? 'New activation key' : 'Reset password (new key)' }}</button>
+                        <button type="button" class="btn small" (click)="reissue(u)">{{ (u.status === 'pending' ? 'New activation key' : 'Reset password (new key)') | t }}</button>
                         @if (u.status === 'disabled') {
-                          <button type="button" class="btn small" (click)="setStatus(u, 'active')">Enable</button>
+                          <button type="button" class="btn small" (click)="setStatus(u, 'active')">{{ 'Enable' | t }}</button>
                         } @else if (u.status === 'active') {
-                          <button type="button" class="btn small" (click)="disable(u)">Disable</button>
+                          <button type="button" class="btn small" (click)="disable(u)">{{ 'Disable' | t }}</button>
                         }
                         @if (u.status === 'active') {
-                          <button type="button" class="btn small" title="Sign in as this user for debugging; you can return to admin from the top bar" (click)="useAs(u)">Use temporarily</button>
+                          <button type="button" class="btn small" [title]="'Sign in as this user for debugging; you can return to admin from the top bar' | t" (click)="useAs(u)">{{ 'Use temporarily' | t }}</button>
                         }
-                        <button type="button" class="btn small" title="Create a preset from the limits shown above" (click)="openSavePreset(u)">Save limits as preset…</button>
-                        <button type="button" class="btn small" [class.danger]="!u.restricted" (click)="openRestrict(u)">{{ u.restricted ? 'Restriction…' : 'Restrict…' }}</button>
-                        <button type="button" class="btn small danger" (click)="remove(u)">Delete</button>
+                        <button type="button" class="btn small" [title]="'Create a preset from the limits shown above' | t" (click)="openSavePreset(u)">{{ 'Save limits as preset…' | t }}</button>
+                        <button type="button" class="btn small" [class.danger]="!u.restricted" (click)="openRestrict(u)">{{ (u.restricted ? 'Restriction…' : 'Restrict…') | t }}</button>
+                        <button type="button" class="btn small danger" (click)="remove(u)">{{ 'Delete' | t }}</button>
                       </div>
                     </td>
                   </tr>
                 }
               }
             } @empty {
-              <tr><td colspan="10" class="muted">No users yet.</td></tr>
+              <tr><td colspan="10" class="muted">{{ 'No users yet.' | t }}</td></tr>
             }
           </tbody>
         </table>
       </div>
     </div>
 
-    <app-modal [open]="!!presetFrom()" title="Save limits as a preset" (closed)="presetFrom.set(null)">
+    <app-modal [open]="!!presetFrom()" [title]="'Save limits as a preset' | t" (closed)="presetFrom.set(null)">
       @if (presetFrom(); as u) {
         <form (ngSubmit)="savePreset(u)">
-          <p class="muted hint">Creates a new preset with the limits currently shown for <b>{{ u.name }}</b>.</p>
+          <p class="muted hint">{{ 'Creates a new preset with the limits currently shown for' | t }} <b>{{ u.name }}</b>.</p>
           <div class="field">
-            <label for="spn">Preset name</label>
+            <label for="spn">{{ 'Preset name' | t }}</label>
             <input id="spn" type="text" name="spn" [(ngModel)]="presetName" maxlength="40" required />
           </div>
-          <label class="check"><input type="checkbox" name="spf" [(ngModel)]="presetFollow" /> Make {{ u.name }} follow the new preset</label>
+          <label class="check"><input type="checkbox" name="spf" [(ngModel)]="presetFollow" /> {{ 'Make {name} follow the new preset' | t: { name: u.name } }}</label>
           @if (error()) {
-            <p class="error">{{ error() }}</p>
+            <p class="error">{{ error() | t }}</p>
           }
           <div class="modal-actions">
-            <button class="btn" type="button" (click)="presetFrom.set(null)">Cancel</button>
-            <button class="btn primary" type="submit" [disabled]="busy() || !presetName.trim()">Create preset</button>
+            <button class="btn" type="button" (click)="presetFrom.set(null)">{{ 'Cancel' | t }}</button>
+            <button class="btn primary" type="submit" [disabled]="busy() || !presetName.trim()">{{ 'Create preset' | t }}</button>
           </div>
         </form>
       }
     </app-modal>
 
-    <app-modal [open]="!!restrictTarget()" [title]="restrictLive()?.restricted ? 'Restriction on ' + restrictLive()?.name : 'Restrict ' + restrictLive()?.name" (closed)="restrictTarget.set(null)">
+    <app-modal [open]="!!restrictTarget()" [title]="(restrictLive()?.restricted ? 'Restriction on {name}' : 'Restrict {name}') | t: { name: restrictLive()?.name ?? '' }" (closed)="restrictTarget.set(null)">
       @if (restrictLive(); as u) {
         @if (!u.restricted) {
-          <p class="muted hint">The user can still sign in, but sees a red warning with your reason and cannot use the website. Running streams stop and their rooms are hidden.</p>
+          <p class="muted hint">{{ 'The user can still sign in, but sees a red warning with your reason and cannot use the website. Running streams stop and their rooms are hidden.' | t }}</p>
           <div class="field">
-            <label for="rs">Reason (shown to them)</label>
+            <label for="rs">{{ 'Reason (shown to them)' | t }}</label>
             <textarea id="rs" rows="3" maxlength="500" [value]="restrictReason()" (input)="restrictReason.set($any($event.target).value)"></textarea>
           </div>
-          <label class="check"><input type="checkbox" [checked]="optChildren()" (change)="optChildren.set($any($event.target).checked)" /> Also restrict everyone they referred (and the people those referred…)</label>
+          <label class="check"><input type="checkbox" [checked]="optChildren()" (change)="optChildren.set($any($event.target).checked)" /> {{ 'Also restrict everyone they referred (and the people those referred…)' | t }}</label>
           @if (optChildren()) {
             @if (willRestrictChildren(u); as kids) {
               <div class="chips child">@for (x of kids; track x.id) {<span class="chip">{{ x.name }}</span>}</div>
             } @else {
-              <p class="muted hint none">Nobody to restrict here.</p>
+              <p class="muted hint none">{{ 'Nobody to restrict here.' | t }}</p>
             }
           }
           @if (u.invitedByName) {
-            <label class="check"><input type="checkbox" [checked]="optParents()" (change)="optParents.set($any($event.target).checked)" /> Also restrict who referred them ({{ u.invitedByName }})</label>
+            <label class="check"><input type="checkbox" [checked]="optParents()" (change)="optParents.set($any($event.target).checked)" /> {{ 'Also restrict who referred them ({name})' | t: { name: u.invitedByName } }}</label>
             @if (optParents()) {
               @if (willRestrictParent(u); as par) {
                 <div class="chips parent">@for (x of [par]; track x.id) {<span class="chip">{{ x.name }}</span>}</div>
               } @else {
-                <p class="muted hint none">{{ u.invitedByName }} is already restricted.</p>
+                <p class="muted hint none">{{ '{name} is already restricted.' | t: { name: u.invitedByName } }}</p>
               }
             }
           }
           <div class="modal-actions">
-            <button type="button" class="btn" (click)="restrictTarget.set(null)">Cancel</button>
-            <button type="button" class="btn danger" (click)="restrict(u)">Restrict access</button>
+            <button type="button" class="btn" (click)="restrictTarget.set(null)">{{ 'Cancel' | t }}</button>
+            <button type="button" class="btn danger" (click)="restrict(u)">{{ 'Restrict access' | t }}</button>
           </div>
         } @else {
-          <p><b>Reason:</b> {{ u.restrictedReason }}</p>
+          <p><b>{{ 'Reason:' | t }}</b> {{ u.restrictedReason }}</p>
           @if (u.appealStatus === 'pending') {
             <div class="appealbox">
-              <b>Appeal from {{ u.name }}</b> <span class="muted">{{ ago(u.appealAt) }}</span>
+              <b>{{ 'Appeal from {name}' | t: { name: u.name } }}</b> <span class="muted">{{ ago(u.appealAt) }}</span>
               <blockquote>{{ u.appealText }}</blockquote>
               <div class="field">
-                <label for="dr">Reply if you deny it (shown to them)</label>
+                <label for="dr">{{ 'Reply if you deny it (shown to them)' | t }}</label>
                 <input id="dr" type="text" maxlength="500" [value]="denyReply()" (input)="denyReply.set($any($event.target).value)" />
               </div>
-              <button type="button" class="btn small" (click)="denyAppeal(u)">Deny appeal</button>
-              <span class="muted hint">To accept it, lift the restriction below.</span>
+              <button type="button" class="btn small" (click)="denyAppeal(u)">{{ 'Deny appeal' | t }}</button>
+              <span class="muted hint">{{ 'To accept it, lift the restriction below.' | t }}</span>
             </div>
           } @else if (u.appealStatus === 'denied') {
-            <p class="muted">Appeal denied. They can send a new one.</p>
+            <p class="muted">{{ 'Appeal denied. They can send a new one.' | t }}</p>
           }
           @if (causedChildren(u).length > 0) {
-            <label class="check"><input type="checkbox" [checked]="optChildren()" (change)="optChildren.set($any($event.target).checked)" /> Also lift it for the {{ causedChildren(u).length }} user(s) restricted because of this one</label>
+            <label class="check"><input type="checkbox" [checked]="optChildren()" (change)="optChildren.set($any($event.target).checked)" /> {{ 'Also lift it for the {n} user(s) restricted because of this one' | t: { n: causedChildren(u).length } }}</label>
             @if (optChildren()) {
               <div class="chips child">@for (x of causedChildren(u); track x.id) {<span class="chip">{{ x.name }}</span>}</div>
             }
           }
           @if (causedParent(u); as p) {
-            <label class="check"><input type="checkbox" [checked]="optParents()" (change)="optParents.set($any($event.target).checked)" /> Also lift it for {{ p.name }}, who referred them</label>
+            <label class="check"><input type="checkbox" [checked]="optParents()" (change)="optParents.set($any($event.target).checked)" /> {{ 'Also lift it for {name}, who referred them' | t: { name: p.name } }}</label>
             @if (optParents()) {
               <div class="chips parent">@for (x of [p]; track x.id) {<span class="chip">{{ x.name }}</span>}</div>
             }
           }
           <div class="modal-actions">
-            <button type="button" class="btn" (click)="restrictTarget.set(null)">Close</button>
-            <button type="button" class="btn primary" (click)="unrestrict(u)">Lift restriction</button>
+            <button type="button" class="btn" (click)="restrictTarget.set(null)">{{ 'Close' | t }}</button>
+            <button type="button" class="btn primary" (click)="unrestrict(u)">{{ 'Lift restriction' | t }}</button>
           </div>
         }
       }
@@ -399,6 +400,7 @@ const CUSTOM = 'custom';
 export class Users implements OnInit, OnDestroy {
   private readonly api = inject(ApiService);
   private readonly dialog = inject(DialogService);
+  protected readonly i18n = inject(I18nService);
   private readonly auth = inject(AuthService);
   private readonly router = inject(Router);
   private readonly streamer = inject(StreamerService);
@@ -431,9 +433,9 @@ export class Users implements OnInit, OnDestroy {
   protected newName = '';
   protected newReferrals = 0;
   protected readonly custom = CUSTOM;
-  protected readonly describe = describeLimits;
+  protected readonly describe = (l: Limits): string => describeLimits(l, (text, params) => this.i18n.t(text, params));
   protected readonly fmt = formatBytes;
-  protected readonly ago = timeAgo;
+  protected readonly ago = (ms: number | null): string => timeAgo(ms, (text, params) => this.i18n.t(text, params));
   protected readonly absolute = absoluteUrl;
   private timer?: ReturnType<typeof setInterval>;
 
@@ -480,8 +482,8 @@ export class Users implements OnInit, OnDestroy {
     const ids = [...this.selected()];
     const choice = this.bulkChoice();
     if (!ids.length || !choice) return;
-    const what = choice === CUSTOM ? 'these custom limits' : `the "${this.presetOf(choice)?.name}" preset`;
-    if (!(await this.dialog.confirm(`Give ${what} to ${ids.length} user(s)? Their streams pick it up right away.`, { title: 'Apply limits', confirmLabel: 'Apply' }))) return;
+    const msg = choice === CUSTOM ? 'Give these custom limits to {n} user(s)? Their streams pick it up right away.' : 'Give the "{preset}" preset to {n} user(s)? Their streams pick it up right away.';
+    if (!(await this.dialog.confirm(msg, { title: 'Apply limits', confirmLabel: 'Apply', params: { n: ids.length, preset: this.presetOf(choice)?.name ?? '' } }))) return;
     this.busy.set(true);
     this.bulkMessage.set(null);
     const failed: string[] = [];
@@ -611,7 +613,7 @@ export class Users implements OnInit, OnDestroy {
 
   protected openSavePreset(u: UserView): void {
     this.error.set(null);
-    this.presetName = u.presetName ? `${u.presetName} copy`.slice(0, 40) : `${u.name}'s limits`.slice(0, 40);
+    this.presetName = (u.presetName ? this.i18n.t('{name} copy', { name: u.presetName }) : this.i18n.t("{name}'s limits", { name: u.name })).slice(0, 40);
     this.presetFollow = true;
     this.presetFrom.set(u);
   }
@@ -721,17 +723,18 @@ export class Users implements OnInit, OnDestroy {
 
   protected async disable(u: UserView): Promise<void> {
     const r = await this.dialog.ask({
-      title: `Disable ${u.name}`,
-      message: `${u.name} is signed out and their streams stop.`,
+      title: 'Disable {name}',
+      message: '{name} is signed out and their streams stop.',
       confirmLabel: 'Disable',
       danger: true,
-      checkbox: { label: `Also disable everyone ${u.name} invited (directly or not)` },
+      checkbox: { label: 'Also disable everyone {name} invited (directly or not)' },
+      params: { name: u.name },
     });
     if (r.ok) await this.setStatus(u, 'disabled', r.checked);
   }
 
   protected async remove(u: UserView): Promise<void> {
-    if (!(await this.dialog.confirm(`Delete ${u.name} and all their rooms? This cannot be undone.`, { title: `Delete ${u.name}`, confirmLabel: 'Delete', danger: true }))) return;
+    if (!(await this.dialog.confirm('Delete {name} and all their rooms? This cannot be undone.', { title: 'Delete {name}', confirmLabel: 'Delete', danger: true, params: { name: u.name } }))) return;
     return this.act(async () => {
       await this.api.delete(`/api/admin/users/${u.id}`);
       this.editing.set(null);

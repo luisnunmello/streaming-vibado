@@ -42,7 +42,8 @@ export class I18nService {
 
   /** Room title: a room named after its owner reads "X's room" / "Sala de X" in the current language. */
   roomName(room: { name: string; ownerName?: string | null; autoName?: boolean }): string {
-    return room.autoName && room.ownerName ? this.t("{name}'s room", { name: room.ownerName }) : room.name;
+    if (room.autoName && room.ownerName) return this.t("{name}'s room", { name: room.ownerName });
+    return room.name === 'Main stream' ? this.t(room.name) : room.name;
   }
 
   t(text: string, params?: Record<string, string | number>): string {
@@ -56,7 +57,7 @@ export class I18nService {
 @Pipe({ name: 't', pure: false })
 export class TPipe implements PipeTransform {
   private readonly i18n = inject(I18nService);
-  transform(text: string, params?: Record<string, string | number>): string {
-    return this.i18n.t(text, params);
+  transform(text: string | null | undefined, params?: Record<string, string | number>): string {
+    return text ? this.i18n.t(text, params) : '';
   }
 }

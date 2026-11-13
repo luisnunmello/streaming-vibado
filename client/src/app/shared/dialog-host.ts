@@ -1,14 +1,15 @@
 import { Component, inject } from '@angular/core';
 import { DialogService } from '../core/dialog.service';
+import { TPipe } from '../core/i18n.service';
 import { Modal } from './modal';
 
 /** Draws the dialog requested through DialogService. Lives once, in the root component. */
 @Component({
   selector: 'app-dialog-host',
-  imports: [Modal],
+  imports: [Modal, TPipe],
   template: `
     @if (dialog.current(); as d) {
-      <app-modal [open]="true" [title]="d.title ?? 'Please confirm'" (closed)="dialog.answer(false)">
+      <app-modal [open]="true" [title]="d.title ?? ('Please confirm' | t)" (closed)="dialog.answer(false)">
         <p class="msg">{{ d.message }}</p>
         @if (d.checkbox; as cb) {
           <label class="check">
@@ -17,9 +18,9 @@ import { Modal } from './modal';
           </label>
         }
         <div class="actions">
-          <button type="button" class="btn" (click)="dialog.answer(false)">{{ d.cancelLabel ?? 'Cancel' }}</button>
+          <button type="button" class="btn" (click)="dialog.answer(false)">{{ d.cancelLabel ?? ('Cancel' | t) }}</button>
           <button type="button" class="btn" [class.danger]="d.danger" [class.primary]="!d.danger" (click)="dialog.answer(true)">
-            {{ d.confirmLabel ?? 'Continue' }}
+            {{ d.confirmLabel ?? ('Continue' | t) }}
           </button>
         </div>
       </app-modal>

@@ -2,15 +2,15 @@
   <video #video autoplay playsinline muted (dblclick)="toggleFullscreen()"></video>
 
   <div class="top">
-    <a routerLink="/lobbies" class="back" aria-label="Back to lobbies">← Lobbies</a>
+    <a routerLink="/lobbies" class="back" [attr.aria-label]="'Back to lobbies' | t">{{ '← Lobbies' | t }}</a>
     @if (v.roomName(); as name) {
-      <span class="title">{{ name }}<small> · {{ v.ownerName() }}</small></span>
+      <span class="title">{{ i18n.roomName({ name: name, ownerName: v.ownerName(), autoName: v.autoName() }) }}<small> · {{ v.ownerName() }}</small></span>
     }
     @if (mine()) {
       <span class="spacer"></span>
-      <button type="button" class="ownerbtn" [class.on]="showControls()" (click)="showControls.set(!showControls())" aria-label="Streamer controls">
+      <button type="button" class="ownerbtn" [class.on]="showControls()" (click)="showControls.set(!showControls())" [attr.aria-label]="'Streamer controls' | t">
         <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M19.14 12.94a7.07 7.07 0 0 0 .05-.94 7 7 0 0 0-.05-.94l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.61-.22l-2.39.96a7 7 0 0 0-1.62-.94l-.36-2.54a.5.5 0 0 0-.5-.42h-3.84a.5.5 0 0 0-.5.42l-.36 2.54a7 7 0 0 0-1.62.94l-2.39-.96a.5.5 0 0 0-.61.22L2.7 8.84a.5.5 0 0 0 .12.64l2.03 1.58a7 7 0 0 0 0 1.88L2.82 14.52a.5.5 0 0 0-.12.64l1.92 3.32c.13.22.39.31.61.22l2.39-.96c.5.38 1.04.7 1.62.94l.36 2.54c.04.24.25.42.5.42h3.84c.25 0 .46-.18.5-.42l.36-2.54a7 7 0 0 0 1.62-.94l2.39.96c.22.09.48 0 .61-.22l1.92-3.32a.5.5 0 0 0-.12-.64l-2.03-1.58zM12 15.6A3.6 3.6 0 1 1 12 8.4a3.6 3.6 0 0 1 0 7.2z"/></svg>
-        Streamer controls
+        {{ 'Streamer controls' | t }}
       </button>
     }
   </div>
@@ -21,13 +21,13 @@
         <app-control-bar [ctl]="ctl()" [compact]="true" />
         @if (!localActive()) {
           <p class="note">
-            This page controls your studio tab. <b>Change screen</b> asks that tab, where you click once to pick the new screen.
+            {{ 'This page controls your studio tab.' | t }} <b>{{ 'Change screen' | t }}</b> {{ 'asks that tab, where you click once to pick the new screen.' | t }}
           </p>
         }
       } @else {
         <div class="idle-note">
-          <p>You are not streaming right now.</p>
-          <a [routerLink]="['/dashboard/rooms', slug()]" class="btn">Open the studio</a>
+          <p>{{ 'You are not streaming right now.' | t }}</p>
+          <a [routerLink]="['/dashboard/rooms', slug()]" class="btn">{{ 'Open the studio' | t }}</a>
         </div>
       }
     </div>
@@ -37,26 +37,26 @@
     <div class="overlay">
       @if (v.problem() === 'notfound') {
         <div class="dot bad"></div>
-        <h1>Room not found</h1>
-        <p>This room doesn't exist, or the link is no longer valid.</p>
-        <a routerLink="/lobbies" class="btn">Browse public rooms</a>
+        <h1>{{ 'Room not found' | t }}</h1>
+        <p>{{ "This room doesn't exist, or the link is no longer valid." | t }}</p>
+        <a routerLink="/lobbies" class="btn">{{ 'Browse public rooms' | t }}</a>
       } @else if (v.problem() === 'kicked') {
         <div class="dot bad"></div>
-        <h1>You were removed from the room</h1>
-        <p>{{ v.error() }}</p>
-        <a routerLink="/lobbies" class="btn">Browse public rooms</a>
+        <h1>{{ 'You were removed from the room' | t }}</h1>
+        <p>{{ v.error() | t }}</p>
+        <a routerLink="/lobbies" class="btn">{{ 'Browse public rooms' | t }}</a>
       } @else if (v.problem() === 'busy') {
         <div class="spinner"></div>
-        <h1>Can't join right now</h1>
-        <p>{{ v.error() }}</p>
-        <p class="hint">Trying again automatically…</p>
+        <h1>{{ "Can't join right now" | t }}</h1>
+        <p>{{ v.error() | t }}</p>
+        <p class="hint">{{ 'Trying again automatically…' | t }}</p>
       } @else if (v.connecting()) {
         <div class="spinner"></div>
-        <p>Connecting…</p>
+        <p>{{ 'Connecting…' | t }}</p>
       } @else {
         <div class="dot"></div>
-        <h1>Stream is offline</h1>
-        <p>It will start playing automatically when the broadcast begins.</p>
+        <h1>{{ 'Stream is offline' | t }}</h1>
+        <p>{{ 'It will start playing automatically when the broadcast begins.' | t }}</p>
         @if (v.error(); as err) {
           <p class="err">{{ err }}</p>
         }
@@ -65,7 +65,7 @@
   } @else if (needsUnmute()) {
     <button class="unmute" type="button" (click)="unmute()">
       <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="currentColor" d="M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0 0 14 7.97v8.05A4.5 4.5 0 0 0 16.5 12zM14 3.23v2.06a7 7 0 0 1 0 13.42v2.06a9 9 0 0 0 0-17.54z"/></svg>
-      Click to unmute
+      {{ 'Click to unmute' | t }}
     </button>
   }
 
@@ -76,21 +76,21 @@
   @if (v.live() && showStats() && v.stats(); as st) {
     <div class="stats">
       {{ st.width }}×{{ st.height }} · {{ st.fps }} fps · {{ (st.bitrateKbps / 1000).toFixed(1) }} Mbps ·
-      buffer {{ st.bufferMs }} ms · loss {{ st.lossPct }}%
+      {{ 'buffer' | t }} {{ st.bufferMs }} ms · {{ 'loss' | t }} {{ st.lossPct }}%
     </div>
   }
 
   <div class="bar">
     @if (v.live()) {
-      <span class="live"><i></i>LIVE</span>
+      <span class="live"><i></i>{{ 'LIVE' | t }}</span>
     }
     <span class="spacer"></span>
     @if (v.layers() > 1) {
       <label class="quality">
-        <span>Quality</span>
-        <select [value]="v.quality()" (change)="v.setQuality($any($event.target).value)" aria-label="Video quality">
+        <span>{{ 'Quality' | t }}</span>
+        <select [value]="v.quality()" (change)="v.setQuality($any($event.target).value)" [attr.aria-label]="'Video quality' | t">
           @for (q of qualities; track q.value) {
-            <option [value]="q.value" [selected]="q.value === v.quality()">{{ q.label }}</option>
+            <option [value]="q.value" [selected]="q.value === v.quality()">{{ q.label | t }}</option>
           }
         </select>
       </label>
@@ -103,10 +103,10 @@
           <svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0 0 14 7.97v8.05A4.5 4.5 0 0 0 16.5 12z"/></svg>
         }
       </button>
-      <input type="range" min="0" max="1" step="0.02" [value]="muted() ? 0 : volume()" aria-label="Volume"
+      <input type="range" min="0" max="1" step="0.02" [value]="muted() ? 0 : volume()" [attr.aria-label]="'Volume' | t"
              (input)="setVolume(+$any($event.target).value)" />
     }
-    <button type="button" class="text" (click)="showStats.set(!showStats())" [class.on]="showStats()">Stats</button>
+    <button type="button" class="text" (click)="showStats.set(!showStats())" [class.on]="showStats()">{{ 'Stats' | t }}</button>
     <button type="button" class="icon" (click)="toggleFullscreen()" [attr.aria-label]="fullscreen() ? 'Exit full screen' : 'Full screen'">
       <svg viewBox="0 0 24 24" width="22" height="22">
         @if (fullscreen()) {

@@ -1,4 +1,5 @@
 import { Component, ElementRef, OnInit, computed, effect, inject, signal, viewChild } from '@angular/core';
+import { TPipe } from '../core/i18n.service';
 import { localControls } from '../core/stream-controls';
 import { StreamerService } from '../core/streamer.service';
 import { CODECS, type AudioMode, type Preset, type StreamSettings, fpsOptions, isPresetActive, resolutionOptions } from '../core/stream-settings';
@@ -6,7 +7,7 @@ import { ControlBar } from '../shared/control-bar';
 
 @Component({
   selector: 'app-streamer-panel',
-  imports: [ControlBar],
+  imports: [ControlBar, TPipe],
   templateUrl: './streamer-panel.html',
   styleUrl: './streamer-panel.scss',
   host: { '(document:fullscreenchange)': 'onFullscreenChange()' },

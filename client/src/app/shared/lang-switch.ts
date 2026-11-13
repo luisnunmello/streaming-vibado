@@ -1,11 +1,13 @@
 import { Component, inject } from '@angular/core';
+import { TPipe } from '../core/i18n.service';
 import { I18nService, type Lang } from '../core/i18n.service';
 
 /** English / Português toggle. */
 @Component({
+  imports: [TPipe],
   selector: 'app-lang-switch',
   template: `
-    <span class="sw" role="group" aria-label="Language">
+    <span class="sw" role="group" [attr.aria-label]="'Language' | t">
       @for (l of langs; track l.code) {
         <button type="button" [class.on]="i18n.lang() === l.code" [attr.aria-pressed]="i18n.lang() === l.code" (click)="i18n.set(l.code)">{{ l.label }}</button>
       }

@@ -9,17 +9,17 @@ import { LangSwitch } from './lang-switch';
   imports: [RouterLink, LangSwitch, TPipe],
   template: `
     <header>
-      <a routerLink="/" class="brand">Streaming</a>
+      <a routerLink="/" class="brand">{{ 'Streaming' | t }}</a>
       <nav>
-        <a routerLink="/lobbies">Public rooms</a>
+        <a routerLink="/lobbies">{{ 'Public rooms' | t }}</a>
       </nav>
       <span class="spacer"></span>
       <app-lang-switch />
       @if (auth.me(); as me) {
-        <a routerLink="/dashboard" class="btn small">{{ me.name }} · Dashboard</a>
+        <a routerLink="/dashboard" class="btn small">{{ me.name }} · {{ 'Dashboard' | t }}</a>
       } @else {
-        <a routerLink="/activate" class="link">Have a key?</a>
-        <a routerLink="/login" class="btn small primary">Sign in</a>
+        <a routerLink="/activate" class="link">{{ 'Have a key?' | t }}</a>
+        <a routerLink="/login" class="btn small primary">{{ 'Sign in' | t }}</a>
       }
     </header>
   `,

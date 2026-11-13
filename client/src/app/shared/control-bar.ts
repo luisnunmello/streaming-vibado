@@ -1,49 +1,51 @@
 import { Component, computed, input } from '@angular/core';
+import { TPipe } from '../core/i18n.service';
 import type { ControlSource } from '../core/stream-controls';
 
 /** Quick streamer controls: change screen, mute, quality presets, stop. */
 @Component({
+  imports: [TPipe],
   selector: 'app-control-bar',
   template: `
     @let c = ctl();
     <div class="bar" [class.nowrap]="compact()">
-      <button type="button" (click)="c.changeScreen()" [disabled]="c.changing() || c.requested()" title="Share a different screen, window or tab without stopping the stream">
+      <button type="button" (click)="c.changeScreen()" [disabled]="c.changing() || c.requested()" [title]="'Share a different screen, window or tab without stopping the stream' | t">
         <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M21 3H3a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h5v2h8v-2h5a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2zm0 14H3V5h18v12zM8 12l2.5-3 2 2.5L15 9l3 4H8z"/></svg>
-        {{ c.changing() ? 'Choosing…' : c.requested() ? (compact() ? 'Waiting…' : 'Waiting for the studio tab…') : compact() ? 'Screen' : 'Change screen' }}
+        {{ (c.changing() ? 'Choosing…' : c.requested() ? (compact() ? 'Waiting…' : 'Waiting for the studio tab…') : compact() ? 'Screen' : 'Change screen') | t }}
       </button>
 
       @if (c.hasAudio()) {
-        <button type="button" (click)="c.toggleMute()" [class.on]="c.muted()" [attr.aria-pressed]="c.muted()" [attr.aria-label]="c.muted() ? 'Unmute' : 'Mute'" [title]="c.muted() ? 'Unmute audio' : 'Mute audio'">
+        <button type="button" (click)="c.toggleMute()" [class.on]="c.muted()" [attr.aria-pressed]="c.muted()" [attr.aria-label]="(c.muted() ? 'Unmute' : 'Mute') | t" [title]="(c.muted() ? 'Unmute audio' : 'Mute audio') | t">
           @if (c.muted()) {
             <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M16.5 12A4.5 4.5 0 0 0 14 7.97v2.21l2.45 2.45c.03-.2.05-.41.05-.63zM4.27 3 3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06a8.99 8.99 0 0 0 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4 9.91 6.09 12 8.18V4z"/></svg>
-            @if (!compact()) { Muted }
+            @if (!compact()) { {{ 'Muted' | t }} }
           } @else {
             <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0 0 14 7.97v8.05A4.5 4.5 0 0 0 16.5 12z"/></svg>
-            @if (!compact()) { Mute }
+            @if (!compact()) { {{ 'Mute' | t }} }
           }
         </button>
       }
 
       @if (c.presets().length > 1 && compact()) {
-        <select class="quality" aria-label="Quality" (change)="c.applyPreset(+$any($event.target).value)">
+        <select class="quality" [attr.aria-label]="'Quality' | t" (change)="c.applyPreset(+$any($event.target).value)">
           @if (activeIndex() < 0) {
-            <option value="" selected disabled>Quality</option>
+            <option value="" selected disabled>{{ 'Quality' | t }}</option>
           }
           @for (p of c.presets(); track p.label; let i = $index) {
-            <option [value]="i" [selected]="i === activeIndex()">{{ p.label }}</option>
+            <option [value]="i" [selected]="i === activeIndex()">{{ p.label | t }}</option>
           }
         </select>
       } @else if (c.presets().length > 1) {
-        <span class="group" role="group" aria-label="Quality">
+        <span class="group" role="group" [attr.aria-label]="'Quality' | t">
           @for (p of c.presets(); track p.label; let i = $index) {
-            <button type="button" class="chip" [class.on]="p.active" (click)="c.applyPreset(i)">{{ p.label }}</button>
+            <button type="button" class="chip" [class.on]="p.active" (click)="c.applyPreset(i)">{{ p.label | t }}</button>
           }
         </span>
       }
 
       <button type="button" class="stop" (click)="c.stop()">
         <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M6 6h12v12H6z"/></svg>
-        Stop
+        {{ 'Stop' | t }}
       </button>
     </div>
   `,

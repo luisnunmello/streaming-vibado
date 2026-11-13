@@ -1,4 +1,5 @@
 import { Component, ElementRef, OnDestroy, OnInit, computed, inject, signal, viewChild } from '@angular/core';
+import { I18nService, TPipe } from '../core/i18n.service';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { Subscription, combineLatest } from 'rxjs';
 import { ApiService } from '../core/api.service';
@@ -9,13 +10,14 @@ import { ControlBar } from '../shared/control-bar';
 
 @Component({
   selector: 'app-viewer',
-  imports: [RouterLink, ControlBar],
+  imports: [RouterLink, ControlBar, TPipe],
   templateUrl: './viewer.html',
   styleUrl: './viewer.scss',
   host: { '(document:fullscreenchange)': 'onFullscreenChange()' },
 })
 export class Viewer implements OnInit, OnDestroy {
   protected readonly v = inject(ViewerService);
+  protected readonly i18n = inject(I18nService);
   private readonly route = inject(ActivatedRoute);
   private readonly api = inject(ApiService);
   private readonly streamer = inject(StreamerService);
