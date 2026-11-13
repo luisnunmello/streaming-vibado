@@ -23,6 +23,18 @@ import { Component, HostListener, input, output } from '@angular/core';
       padding: 1rem;
       background: rgba(5, 8, 14, 0.7);
       overflow-y: auto;
+      animation: fade-in 0.18s ease-out;
+    }
+    @keyframes fade-in {
+      from {
+        opacity: 0;
+      }
+    }
+    @keyframes pop-in {
+      from {
+        opacity: 0;
+        transform: translateY(14px) scale(0.97);
+      }
     }
     .panel {
       width: min(560px, 100%);
@@ -33,6 +45,7 @@ import { Component, HostListener, input, output } from '@angular/core';
       border: 1px solid var(--line);
       background: var(--panel);
       box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6);
+      animation: pop-in 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
     }
     .panel.wide {
       width: min(780px, 100%);

@@ -1,4 +1,4 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, effect, inject, signal, DestroyRef } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { AuthService } from '../core/auth.service';
 import { TPipe } from '../core/i18n.service';
@@ -70,6 +70,15 @@ import { LangSwitch } from './lang-switch';
     .menu {
       display: contents;
     }
+    .burger svg {
+      animation: burger-turn 0.25s ease;
+    }
+    @keyframes burger-turn {
+      from {
+        transform: rotate(-90deg) scale(0.8);
+        opacity: 0.4;
+      }
+    }
     .burger {
       display: none;
       width: 40px;
@@ -86,27 +95,45 @@ import { LangSwitch } from './lang-switch';
         gap: 0.6rem;
         padding: 0.55rem 0.8rem;
       }
+      header {
+        position: sticky;
+        top: 0;
+        z-index: 40;
+      }
       .burger {
         display: grid;
-        margin-left: auto;
+        margin-left: auto; /* always at the right edge */
+      }
+      /* the menu takes over the whole screen, under the header row */
+      .brand,
+      .share,
+      .burger {
+        position: relative;
+        z-index: 31;
       }
       .menu {
-        display: none;
-        position: absolute;
-        top: 100%;
-        left: 0;
-        right: 0;
+        display: flex;
+        visibility: hidden;
+        opacity: 0;
+        transform: translateX(28px);
+        pointer-events: none;
+        transition: opacity 0.2s ease, transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1), visibility 0s linear 0.25s;
+        position: fixed;
+        inset: 0;
         z-index: 30;
         flex-direction: column;
         align-items: stretch;
         gap: 0.7rem;
-        padding: 0.8rem;
-        border-bottom: 1px solid var(--line);
+        padding: 4.2rem 1rem 1.5rem;
         background: var(--panel);
-        box-shadow: 0 12px 24px rgba(0, 0, 0, 0.45);
+        overflow-y: auto;
       }
       .menu.open {
-        display: flex;
+        visibility: visible;
+        opacity: 1;
+        transform: none;
+        pointer-events: auto;
+        transition: opacity 0.2s ease, transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1), visibility 0s;
       }
       .menu .spacer {
         display: none;
@@ -127,6 +154,10 @@ import { LangSwitch } from './lang-switch';
 export class Topbar {
   protected readonly auth = inject(AuthService);
   protected readonly open = signal(false);
+  private readonly lockScroll = effect(() => {
+    document.body.style.overflow = this.open() ? 'hidden' : '';
+  });
+  private readonly unlock = inject(DestroyRef).onDestroy(() => (document.body.style.overflow = ''));
   constructor() {
     void this.auth.ensureLoaded();
   }

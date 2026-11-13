@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit, inject, signal } from '@angular/core';
+import { Component, OnDestroy, OnInit, inject, signal, effect, DestroyRef } from '@angular/core';
 import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { Account } from './account';
 import { Appeal } from './appeal';
@@ -222,6 +222,15 @@ import { StreamerService } from '../../core/streamer.service';
     header {
       position: relative;
     }
+    .burger svg {
+      animation: burger-turn 0.25s ease;
+    }
+    @keyframes burger-turn {
+      from {
+        transform: rotate(-90deg) scale(0.8);
+        opacity: 0.4;
+      }
+    }
     .burger {
       display: none;
       position: relative;
@@ -276,6 +285,12 @@ import { StreamerService } from '../../core/streamer.service';
         gap: 0.6rem;
         padding: 0.55rem 0.8rem;
       }
+      /* the header stays on top while scrolling; the burger is always the last thing on the right */
+      header {
+        position: sticky;
+        top: 0;
+        z-index: 40;
+      }
       .share {
         margin-left: auto;
         order: 1;
@@ -283,27 +298,41 @@ import { StreamerService } from '../../core/streamer.service';
       .burger {
         display: grid;
         order: 2;
+        margin-left: 0;
       }
-      /* the menu drops down under the header */
+      header:not(:has(.share)) .burger {
+        margin-left: auto;
+      }
+      /* the menu takes over the whole screen, under the header row */
+      .brand,
+      .share,
+      .burger {
+        position: relative;
+        z-index: 31;
+      }
       .menu {
-        display: none;
-        position: absolute;
-        top: 100%;
-        left: 0;
-        right: 0;
+        display: flex;
+        visibility: hidden;
+        opacity: 0;
+        transform: translateX(28px);
+        pointer-events: none;
+        transition: opacity 0.2s ease, transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1), visibility 0s linear 0.25s;
+        position: fixed;
+        inset: 0;
         z-index: 30;
         flex-direction: column;
         align-items: stretch;
         gap: 0.7rem;
-        padding: 0.8rem;
-        border-bottom: 1px solid var(--line);
+        padding: 4.2rem 1rem 1.5rem;
         background: var(--panel);
-        box-shadow: 0 12px 24px rgba(0, 0, 0, 0.45);
-        max-height: calc(100dvh - 3.5rem);
         overflow-y: auto;
       }
       .menu.open {
-        display: flex;
+        visibility: visible;
+        opacity: 1;
+        transform: none;
+        pointer-events: auto;
+        transition: opacity 0.2s ease, transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1), visibility 0s;
       }
       .menu > * {
         order: 0;
@@ -369,6 +398,11 @@ export class Shell implements OnInit, OnDestroy {
   protected tab: 'appeal' | 'account' = 'appeal';
   /** The hamburger menu (small screens). */
   protected readonly menuOpen = signal(false);
+  private readonly lockScroll = effect(() => {
+    // the page behind the full-screen menu must not scroll
+    document.body.style.overflow = this.menuOpen() ? 'hidden' : '';
+  });
+  private readonly unlock = inject(DestroyRef).onDestroy(() => (document.body.style.overflow = ''));
 
   /** A room named after its owner ("fernando's room") reads in the current language. */
   protected liveRoomTitle(name: string): string {
