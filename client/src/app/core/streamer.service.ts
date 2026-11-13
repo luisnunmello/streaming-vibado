@@ -59,6 +59,8 @@ export class StreamerService {
   private activeCodec: Codec = 'h264';
   private statsTimer?: ReturnType<typeof setInterval>;
   private appliedFps = 0;
+  private nudges = 0;
+  private lastNudgeAt = 0;
   private lastBytes = 0;
   private lastStatsAt = 0;
   private unsubs: Array<() => void> = [];
@@ -298,6 +300,8 @@ export class StreamerService {
       this.updateSource(video);
       // the new surface may have a different size: refit the output to the chosen resolution
       await this.applyLive(s);
+      this.nudges = 0;
+      this.lastNudgeAt = performance.now();
     } catch (e: any) {
       this.error.set(e?.message ?? 'Could not change the source');
     } finally {
@@ -492,6 +496,8 @@ export class StreamerService {
   // ---------------------------------------------------------------- stats
 
   private startStats() {
+    this.nudges = 0;
+    this.lastNudgeAt = performance.now();
     this.lastBytes = 0;
     this.lastStatsAt = 0;
     this.statsTimer = setInterval(() => void this.collectStats(), 1000);
@@ -533,8 +539,57 @@ export class StreamerService {
         availableKbps: available != null ? Math.round(available) : null,
         layers: outs.length,
       });
+      this.restoreResolutionIfStuck(top.frameHeight ?? 0, reason);
     } catch {
       /* transport closing */
+    }
+  }
+
+  /** Resolution the top quality level should have: the source size divided by the scale we asked for. */
+  private expectedHeight(): number {
+    const s = this.current;
+    const native = this.source()?.height ?? 0;
+    return s && native ? Math.round(native / this.scaleFor(s)) : 0;
+  }
+
+  /**
+   * Chrome starts encoding small while its bandwidth estimate is still ramping up, and does not always
+   * come back to the requested size by itself (it only does after the encoder parameters are written again,
+   * e.g. when the bitrate is changed). If the picture stays well below what was asked for and the CPU is not
+   * the reason, write the parameters again, a few times at most.
+   */
+  private restoreResolutionIfStuck(actualHeight: number, limitReason: string | undefined): void {
+    const expected = this.expectedHeight();
+    const now = performance.now();
+    if (!expected || !actualHeight || this.nudges >= 6 || now - this.lastNudgeAt < 3000) return;
+    if (actualHeight >= expected * 0.85 || limitReason === 'cpu') return;
+    this.nudges++;
+    this.lastNudgeAt = now;
+    void this.nudgeEncoder();
+  }
+
+  private async nudgeEncoder(): Promise<void> {
+    const sender = this.videoProducer?.rtpSender;
+    const s = this.current;
+    if (!sender || !s) return;
+    try {
+      const desired = this.encodings(s);
+      const write = async (bitrateFactor: number) => {
+        const params = sender.getParameters();
+        params.encodings.forEach((e, i) => {
+          const d = desired[i];
+          if (!d) return;
+          e.maxBitrate = Math.round((d.maxBitrate ?? 0) * bitrateFactor);
+          e.maxFramerate = d.maxFramerate;
+          e.scaleResolutionDownBy = d.scaleResolutionDownBy;
+        });
+        await sender.setParameters(params);
+      };
+      // An identical write can be ignored, so go slightly lower first and then to the real value.
+      await write(0.97);
+      await write(1);
+    } catch (e) {
+      console.warn('Could not refresh the encoder', e);
     }
   }
 
