@@ -39,6 +39,7 @@ import { HttpError } from './errors.js';
 import { getGlobals, updateGlobals } from './globals.js';
 import { createPreset, deletePreset, listPresets, updatePreset } from './presets.js';
 import type { LiveService } from './live.js';
+import { notifyAdmin } from './notify.js';
 import { checkNewPassword } from './password.js';
 import { autoRoomName, countRooms, createRoom, deleteRoom, getRoomById, getRoomBySlug, listPublicRooms, listRooms, updateRoom, type Room } from './rooms.js';
 import { setPassword as setMasterPassword, verifyPassword as verifyMasterPassword } from './settings.js';
@@ -306,6 +307,9 @@ export function buildApi(live: LiveService, budget: BudgetManager): Router {
       const p = principalOf(res);
       if (p.role !== 'user') throw new HttpError(403, 'Only users can appeal');
       submitAppeal(p.userId!, req.body?.text);
+      const who = getUser(p.userId!);
+      void notifyAdmin(`New appeal from ${who?.name ?? 'a user'} (restricted: ${who?.restrictedReason ?? ''}):
+${String(req.body?.text ?? '').trim().slice(0, 600)}`);
       res.json({ ok: true });
     }),
   );

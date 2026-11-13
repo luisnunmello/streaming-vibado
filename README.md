@@ -145,6 +145,8 @@ Use a process manager (systemd, pm2) to keep it running. Node 22.13+ is required
 | `RTC_INITIAL_BITRATE` | `8000000` | Starting bandwidth estimate per viewer (bps), so quality ramps up fast |
 | `RTC_MAX_INCOMING_BITRATE` | `60000000` | Cap on what the admin may send (bps) |
 | `TLS_KEY`, `TLS_CERT` | – | Optional built-in HTTPS without nginx |
+| `NOTIFY_WEBHOOK_URL` | – | Where the admin is notified (new appeals, and reminders while any wait): a Discord webhook URL, or a ntfy.sh topic / any URL that accepts a plain POST |
+| `APPEAL_REMINDER_HOURS` | `12` | Hours between reminders while appeals are pending (0 = none) |
 
 Budgets set on the *Bandwidth* page are stored in the database and take precedence over the environment values from then on.
 

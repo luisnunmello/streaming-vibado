@@ -28,6 +28,7 @@ import { Topbar } from '../shared/topbar';
           <p class="error">{{ error() | t }}</p>
         }
         <p class="alt">{{ 'Have an invite key?' | t }} <a routerLink="/activate">{{ 'Activate your account' | t }}</a></p>
+        <p class="alt access">{{ "Don't have a referral code and want access? Ask luis10barbo on Discord." | t }}</p>
       </form>
     </main>
   `,

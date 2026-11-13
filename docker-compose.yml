@@ -14,6 +14,9 @@ services:
       # Only used on the very first start; afterwards the password lives in the data volume
       # and is changed under Account in the dashboard. Leave empty to have one generated (see `docker compose logs`).
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      # Optional: where to notify the admin about new appeals (Discord webhook or ntfy.sh URL), and how often to remind.
+      NOTIFY_WEBHOOK_URL: ${NOTIFY_WEBHOOK_URL:-}
+      APPEAL_REMINDER_HOURS: ${APPEAL_REMINDER_HOURS:-12}
       # nginx sits in front: trust its X-Forwarded-For for login rate limiting.
       TRUST_PROXY: "1"
     ports:

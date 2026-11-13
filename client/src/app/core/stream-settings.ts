@@ -32,7 +32,7 @@ export const DEFAULT_SETTINGS: StreamSettings = {
   screenAudioGain: 1,
   deviceGain: 1,
   codec: 'h264',
-  audioMode: 'system',
+  audioMode: 'window',
   audioDeviceId: '',
   adaptive: false,
 };
