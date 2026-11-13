@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit, inject, signal } from '@angular/core';
+import { Component, OnDestroy, OnInit, computed, inject, signal } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { StreamerPanel } from '../../admin/streamer-panel';
 import { ApiService } from '../../core/api.service';
@@ -37,6 +37,10 @@ import { absoluteUrl, copyText } from '../../core/util';
     } @else if (error()) {
       <div class="card">
         <p class="error">{{ error() | t }}</p>
+        @if (openElsewhere()) {
+          <p class="muted">{{ 'You can move the studio to this window. The other window stops streaming and lets go of the room.' | t }}</p>
+          <button type="button" class="btn primary" (click)="takeOver()">{{ 'Use the studio in this window' | t }}</button>
+        }
         <a routerLink="/dashboard/rooms" class="btn">{{ 'Back to rooms' | t }}</a>
       </div>
     } @else {
@@ -70,6 +74,8 @@ export class Studio implements OnInit, OnDestroy {
   protected readonly room = signal<RoomView | null>(null);
   protected readonly copied = signal(false);
   protected readonly soundsOpen = signal(false);
+  /** The room's studio is open in another window (the server refused this one). */
+  protected readonly openElsewhere = computed(() => this.error() === 'This room is already open in another window');
 
   async ngOnInit(): Promise<void> {
     const slug = this.route.snapshot.paramMap.get('slug') ?? '';
@@ -95,6 +101,28 @@ export class Studio implements OnInit, OnDestroy {
       await this.streamer.start(this.streamer.settings());
       if (this.streamer.error() === 'Screen sharing was cancelled.') this.streamer.error.set(null);
       void this.router.navigate([], { queryParams: {}, replaceUrl: true });
+    }
+  }
+
+  /** Moves the studio from the other window to this one. */
+  protected async takeOver(): Promise<void> {
+    const slug = this.route.snapshot.paramMap.get('slug') ?? '';
+    this.loading.set(true);
+    this.error.set(null);
+    try {
+      await this.streamer.enter(
+        slug,
+        () => {
+          this.auth.clear();
+          void this.router.navigate(['/login']);
+        },
+        true,
+      );
+      this.shareSvc.remember(slug);
+    } catch (e: any) {
+      this.error.set(e.message);
+    } finally {
+      this.loading.set(false);
     }
   }
 

@@ -189,7 +189,7 @@ export class StreamerService {
   // ---------------------------------------------------------------- room connection
 
   /** Connects and joins the room as its owner. Rejects when the room is not yours. */
-  async enter(slug: string, onSessionEnded: () => void): Promise<void> {
+  async enter(slug: string, onSessionEnded: () => void, takeover = false): Promise<void> {
     await this.leave();
     const token = this.api.token();
     if (!token) throw new Error('Not signed in');
@@ -199,6 +199,11 @@ export class StreamerService {
         const before = this.viewers();
         this.viewers.set(n);
         if (this.state() === 'live') this.sound.play(n > before ? 'viewerJoin' : n < before ? 'viewerLeave' : 'viewerJoin');
+      }),
+      // The studio was moved to another window: this one stops and lets go of the room.
+      this.sig.on('ownerTaken', () => {
+        this.error.set('This studio was moved to another window.');
+        void this.stop(false);
       }),
       this.sig.on('sessionRevoked', () => {
         void this.stop(false);
@@ -239,7 +244,7 @@ export class StreamerService {
         resolve();
       });
     });
-    const res = await this.sig.request<{ role: string; room: RoomInfo; limits: Limits | null; rtpCapabilities: types.RtpCapabilities }>('joinRoom', { slug });
+    const res = await this.sig.request<{ role: string; room: RoomInfo; limits: Limits | null; rtpCapabilities: types.RtpCapabilities }>('joinRoom', { slug, takeover });
     if (res.role !== 'owner') throw new Error('This is not your room');
     this.room.set(res.room);
     this.limits.set(res.limits ?? null);
