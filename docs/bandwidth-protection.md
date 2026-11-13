@@ -168,3 +168,7 @@ That allows roughly **11 completely full user rooms** at the same time, plus you
 - **CPU.** One CPU core (one mediasoup worker) forwards all the media. Before bandwidth runs out, a very small server may run out of CPU. Watch CPU while you load-test.
 - **Quality of the encoder on the user's side.** Limits cap bitrate; they cannot make a weak computer produce smooth video.
 - **Restarts.** Sessions and live measurements are kept in memory. A restart signs people out and ends all streams. Accounts, rooms, limits and traffic totals are in the database and survive.
+
+## Streams watched at once
+
+A signed-in user may watch *Streams watched at once* streams (user limit, default 1); people who are not signed in are limited by the server setting *Streams watched at once (not signed in)* (default 1, counted per IP address, so people sharing a connection share it). Opening one more stream ends the one the person interacted with longest ago. Windows on the same room count as one stream, and the admin is not limited.

@@ -86,6 +86,7 @@ export interface GlobalSettings {
   adminReservePct: number;
   idleStopMinutes: number;
   maxConnectionsPerIp: number;
+  anonymousMaxWatching: number;
   userStreamsPaused: boolean;
 }
 

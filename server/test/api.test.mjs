@@ -574,6 +574,15 @@ describe('watching several streams at once', () => {
     const x2 = await join(s2, { token: sa.token });
     await new Promise((x) => setTimeout(x, 100));
     assert.equal(kickedX, true, 'default limit is 1');
+    // anonymous viewers are limited too (counted per IP, default 1)
+    const an1 = await join(s1);
+    let kickedAnon = false;
+    an1.socket.on('kicked', () => (kickedAnon = true));
+    const an2 = await join(s2);
+    await new Promise((x) => setTimeout(x, 100));
+    assert.equal(kickedAnon, true, 'anonymous viewers get the same rule');
+    an1.socket.close();
+    an2.socket.close();
     for (const o of owners) o.socket.close();
     for (const s of [w1, w2, w3, x1, x2]) s.socket.close();
   });

@@ -494,23 +494,26 @@ export class LiveService {
 
   /**
    * A signed-in user may watch `maxWatching` streams at once. Opening one more ends the stream they interacted
-   * with the longest time ago. (Windows on the same room count as one stream; anonymous viewers have no account to count.)
+   * with the longest time ago. (Windows on the same room count as one stream.)
    */
   private enforceWatchLimit(peer: Peer, newRoomId: string): void {
     const p = peer.principal;
-    if (p?.role !== 'user') return;
-    const max = getUser(p.userId!)?.limits.maxWatching ?? 1;
+    if (p?.role === 'admin') return;
+    // Signed-in users are counted per account; anonymous viewers can only be told apart by IP address.
+    const max = p ? (getUser(p.userId!)?.limits.maxWatching ?? 1) : getGlobals().anonymousMaxWatching;
+    if (max <= 0) return;
+    const same = (o: Peer): boolean => (p ? o.principal?.role === 'user' && o.principal.userId === p.userId : !o.principal && o.ip === peer.ip);
     const groups = new Map<string, Peer[]>();
     for (const other of this.peers.values()) {
       if (other === peer || other.isOwner || !other.roomId || other.roomId === newRoomId) continue;
-      if (other.principal?.role !== 'user' || other.principal.userId !== p.userId) continue;
+      if (!same(other)) continue;
       groups.set(other.roomId, [...(groups.get(other.roomId) ?? []), other]);
     }
     const lastUse = (g: Peer[]) => Math.max(...g.map((x) => x.lastActive));
     while (groups.size >= max && groups.size > 0) {
       const [oldestRoom, oldest] = [...groups.entries()].sort((a, b) => lastUse(a[1]) - lastUse(b[1]))[0];
       for (const other of oldest) {
-        other.socket.emit('kicked', { reason: 'You started watching another stream, and your account can watch only ' + max + ' at a time.' });
+        other.socket.emit('kicked', { reason: `You started watching another stream, and you can watch only ${max} at a time.` });
         this.leaveRoom(other);
       }
       groups.delete(oldestRoom);

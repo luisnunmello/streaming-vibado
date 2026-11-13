@@ -13,6 +13,8 @@ export interface GlobalSettings {
   idleStopMinutes: number;
   /** Viewer connections allowed per IP address. 0 = unlimited. */
   maxConnectionsPerIp: number;
+  /** Streams someone who is not signed in may watch at once (counted per IP address). 0 = unlimited. */
+  anonymousMaxWatching: number;
   /** Emergency switch: no user can stream while true. */
   userStreamsPaused: boolean;
 }
@@ -23,6 +25,7 @@ const defaults = (): GlobalSettings => ({
   adminReservePct: 30,
   idleStopMinutes: 30,
   maxConnectionsPerIp: 4,
+  anonymousMaxWatching: 1,
   userStreamsPaused: false,
 });
 
@@ -56,6 +59,7 @@ export function updateGlobals(patch: Record<string, unknown>): GlobalSettings {
   if (patch['adminReservePct'] !== undefined) next.adminReservePct = num(patch['adminReservePct'], 'adminReservePct', 0, 90);
   if (patch['idleStopMinutes'] !== undefined) next.idleStopMinutes = num(patch['idleStopMinutes'], 'idleStopMinutes', 0, 1440);
   if (patch['maxConnectionsPerIp'] !== undefined) next.maxConnectionsPerIp = num(patch['maxConnectionsPerIp'], 'maxConnectionsPerIp', 0, 1000);
+  if (patch['anonymousMaxWatching'] !== undefined) next.anonymousMaxWatching = num(patch['anonymousMaxWatching'], 'anonymousMaxWatching', 0, 100);
   if (patch['userStreamsPaused'] !== undefined) {
     if (typeof patch['userStreamsPaused'] !== 'boolean') throw new HttpError(400, 'userStreamsPaused must be true or false');
     next.userStreamsPaused = patch['userStreamsPaused'];

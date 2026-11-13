@@ -103,6 +103,11 @@ import type { BandwidthView, GlobalSettings } from '../../core/models';
             <input id="ip" type="number" min="0" [value]="s.maxConnectionsPerIp" (input)="patch({ maxConnectionsPerIp: +$any($event.target).value })" />
             <span class="hint">0 = unlimited.</span>
           </div>
+          <div class="field">
+            <label for="anon">Streams watched at once (not signed in)</label>
+            <input id="anon" type="number" min="0" [value]="s.anonymousMaxWatching" (input)="patch({ anonymousMaxWatching: +$any($event.target).value })" />
+            <span class="hint">Counted per IP address, so people sharing a connection share it. 0 = unlimited.</span>
+          </div>
         </div>
 
         <p class="muted hint presets-note">
