@@ -60,12 +60,19 @@ import { absoluteUrl, copyText } from '../../core/util';
         }
         <div class="modal-actions">
           <button class="btn" type="button" (click)="newOpen.set(false)">{{ 'Cancel' | t }}</button>
-          <button class="btn primary" type="submit" [disabled]="busy() || (!singleRoom() && !newName.trim()) || full()">{{ 'Create room' | t }}</button>
+          <button class="btn primary" type="submit" [class.busy]="busy()" [disabled]="busy() || (!singleRoom() && !newName.trim()) || full()">{{ 'Create room' | t }}</button>
         </div>
       </form>
     </app-modal>
 
-    <div class="card">
+    @if (!loaded()) {
+      <div class="card" aria-busy="true">
+        <div class="skeleton row"></div>
+        <div class="skeleton row"></div>
+        <div class="skeleton row short"></div>
+      </div>
+    }
+    <div class="card" [class.is-loading]="!loaded()">
       <div class="table-wrap">
         <table class="list stack">
           <thead>
@@ -301,12 +308,16 @@ export class Rooms implements OnInit, OnDestroy {
     return this.canPublic();
   }
 
+  protected readonly loaded = signal(false);
+
   private async load(): Promise<void> {
     if (!this.auth.me()) return;
     try {
       this.rooms.set((await this.api.get<{ rooms: RoomView[] }>('/api/rooms')).rooms);
     } catch (e: any) {
       this.error.set(e.message);
+    } finally {
+      this.loaded.set(true);
     }
   }
 

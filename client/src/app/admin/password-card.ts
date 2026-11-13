@@ -22,7 +22,7 @@ import { AuthService } from '../core/auth.service';
           <label for="rep">{{ 'Repeat new password' | t }}</label>
           <input id="rep" type="password" name="rep" [(ngModel)]="repeat" autocomplete="new-password" required />
         </div>
-        <button class="btn primary" type="submit" [disabled]="busy() || !current || !next || !repeat">{{ 'Change password' | t }}</button>
+        <button class="btn primary" type="submit" [class.busy]="busy()" [disabled]="busy() || !current || !next || !repeat">{{ 'Change password' | t }}</button>
         @if (error()) {
           <p class="error">{{ error() | t }}</p>
         }

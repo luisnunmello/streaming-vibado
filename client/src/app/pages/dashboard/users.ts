@@ -62,7 +62,7 @@ const CUSTOM = 'custom';
         }
         <div class="modal-actions">
           <button class="btn" type="button" (click)="newOpen.set(false)">{{ 'Cancel' | t }}</button>
-          <button class="btn primary" type="submit" [disabled]="busy() || !newName.trim()">{{ 'Create and generate key' | t }}</button>
+          <button class="btn primary" type="submit" [class.busy]="busy()" [disabled]="busy() || !newName.trim()">{{ 'Create and generate key' | t }}</button>
         </div>
       </form>
     </app-modal>
@@ -106,7 +106,7 @@ const CUSTOM = 'custom';
           <app-limits-editor [limits]="l" (limitsChange)="editBulk($event)" />
         }
         <div class="row actions">
-          <button type="button" class="btn primary small" [disabled]="busy()" (click)="applyBulk()">{{ 'Apply to {n} user(s)' | t: { n: selected().size } }}</button>
+          <button type="button" class="btn primary small" [class.busy]="busy()" [disabled]="busy()" (click)="applyBulk()">{{ 'Apply to {n} user(s)' | t: { n: selected().size } }}</button>
           <button type="button" class="btn small" (click)="selected.set(emptySet)">{{ 'Clear selection' | t }}</button>
         </div>
         @if (bulkMessage()) {
@@ -115,7 +115,14 @@ const CUSTOM = 'custom';
       </div>
     }
 
-    <div class="card">
+    @if (!loaded()) {
+      <div class="card" aria-busy="true">
+        <div class="skeleton row"></div>
+        <div class="skeleton row"></div>
+        <div class="skeleton row short"></div>
+      </div>
+    }
+    <div class="card" [class.is-loading]="!loaded()">
       <div class="table-wrap">
         <table class="list stack">
           <thead>
@@ -225,7 +232,7 @@ const CUSTOM = 'custom';
           }
           <div class="modal-actions">
             <button class="btn" type="button" (click)="presetFrom.set(null)">{{ 'Cancel' | t }}</button>
-            <button class="btn primary" type="submit" [disabled]="busy() || !presetName.trim()">{{ 'Create preset' | t }}</button>
+            <button class="btn primary" type="submit" [class.busy]="busy()" [disabled]="busy() || !presetName.trim()">{{ 'Create preset' | t }}</button>
           </div>
         </form>
       }
@@ -497,11 +504,15 @@ export class Users implements OnInit, OnDestroy {
     return this.presets().find((p) => '' + p.id === choice);
   }
 
+  protected readonly loaded = signal(false);
+
   private async load(): Promise<void> {
     try {
       this.users.set((await this.api.get<{ users: UserView[] }>('/api/admin/users')).users);
     } catch (e: any) {
       this.error.set(e.message);
+    } finally {
+      this.loaded.set(true);
     }
   }
 

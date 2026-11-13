@@ -20,7 +20,7 @@ import { Topbar } from '../shared/topbar';
             <label for="key">{{ 'Key' | t }}</label>
             <input id="key" type="text" name="key" [(ngModel)]="key" [placeholder]="'XXXX-XXXX-XXXX-XXXX' | t" autocomplete="off" autofocus required />
           </div>
-          <button class="btn primary wide" type="submit" [disabled]="busy() || !key">{{ 'Continue' | t }}</button>
+          <button class="btn primary wide" type="submit" [class.busy]="busy()" [disabled]="busy() || !key">{{ 'Continue' | t }}</button>
           @if (error()) {
             <p class="error">{{ error() | t }}</p>
           }
@@ -51,7 +51,7 @@ import { Topbar } from '../shared/topbar';
             <label for="pw2">{{ 'Repeat password' | t }}</label>
             <input id="pw2" type="password" name="pw2" [(ngModel)]="repeat" autocomplete="new-password" required />
           </div>
-          <button class="btn primary wide" type="submit" [disabled]="busy() || !password || !repeat || (kind() === 'referral' && !name)">{{ 'Activate' | t }}</button>
+          <button class="btn primary wide" type="submit" [class.busy]="busy()" [disabled]="busy() || !password || !repeat || (kind() === 'referral' && !name)">{{ 'Activate' | t }}</button>
           @if (error()) {
             <p class="error">{{ error() | t }}</p>
           }

@@ -1,3 +1,5 @@
+import { toast } from './toast';
+
 export function formatBytes(bytes: number): string {
   if (bytes < 1e6) return `${(bytes / 1e3).toFixed(0)} KB`;
   if (bytes < 1e9) return `${(bytes / 1e6).toFixed(1)} MB`;
@@ -25,6 +27,7 @@ export const absoluteUrl = (path: string): string => location.origin + path;
 export async function copyText(text: string): Promise<boolean> {
   try {
     await navigator.clipboard.writeText(text);
+    toast('Copied to the clipboard');
     return true;
   } catch {
     return false;

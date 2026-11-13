@@ -70,6 +70,7 @@ import { LangSwitch } from './lang-switch';
     .menu {
       display: contents;
     }
+    /* ANIM:menu-icon */
     .burger svg {
       animation: burger-turn 0.25s ease;
     }
@@ -113,6 +114,7 @@ import { LangSwitch } from './lang-switch';
       }
       .menu {
         display: flex;
+        /* ANIM:menu-slide (closed state + transition) */
         visibility: hidden;
         opacity: 0;
         transform: translateX(28px);
@@ -128,6 +130,7 @@ import { LangSwitch } from './lang-switch';
         background: var(--panel);
         overflow-y: auto;
       }
+      /* ANIM:menu-slide (open state) */
       .menu.open {
         visibility: visible;
         opacity: 1;

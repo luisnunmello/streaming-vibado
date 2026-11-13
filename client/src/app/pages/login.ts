@@ -23,7 +23,7 @@ import { Topbar } from '../shared/topbar';
           <input id="pw" type="password" name="pw" [(ngModel)]="password" autocomplete="current-password" required />
         </div>
         <label class="check remember"><input type="checkbox" name="remember" [(ngModel)]="remember" /> {{ 'Remember me (stay signed in for 30 days)' | t }}</label>
-        <button class="btn primary wide" type="submit" [disabled]="busy() || !name || !password">{{ 'Sign in' | t }}</button>
+        <button class="btn primary wide" type="submit" [class.busy]="busy()" [disabled]="busy() || !name || !password">{{ 'Sign in' | t }}</button>
         @if (error()) {
           <p class="error">{{ error() | t }}</p>
         }

@@ -2,6 +2,7 @@ import { Component, OnDestroy, OnInit, computed, inject, signal } from '@angular
 import { TPipe } from '../../core/i18n.service';
 import { FormsModule } from '@angular/forms';
 import { ApiService } from '../../core/api.service';
+import { toast } from '../../core/toast';
 import { DialogService } from '../../core/dialog.service';
 import { RouterLink } from '@angular/router';
 import type { BandwidthView, GlobalSettings } from '../../core/models';
@@ -251,6 +252,7 @@ export class Bandwidth implements OnInit, OnDestroy {
       this.original = JSON.stringify(settings);
       this.draft.set(settings);
       this.saved.set(true);
+      toast('Saved.');
       await this.refresh();
     } catch (e: any) {
       this.error.set(e.message);

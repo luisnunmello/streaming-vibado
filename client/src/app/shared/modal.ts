@@ -1,12 +1,12 @@
-import { Component, HostListener, input, output } from '@angular/core';
+import { Component, ElementRef, HostListener, effect, input, output, signal, untracked, viewChild } from '@angular/core';
 
 /** A centered dialog over a dimmed page. Closes on Escape or a click outside; content goes inside the tags. */
 @Component({
   selector: 'app-modal',
   template: `
-    @if (open()) {
-      <div class="backdrop" (mousedown)="onBackdrop($event)">
-        <div class="panel" [class.wide]="wide()" role="dialog" aria-modal="true" [attr.aria-label]="title()">
+    @if (shown()) {
+      <div class="backdrop modal-backdrop" [class.leaving]="leaving()" (mousedown)="onBackdrop($event)">
+        <div #panel class="panel modal-panel" [class.leaving]="leaving()" [class.wide]="wide()" role="dialog" aria-modal="true" [attr.aria-label]="title()">
           <h2>{{ title() }}</h2>
           <ng-content />
         </div>
@@ -23,18 +23,6 @@ import { Component, HostListener, input, output } from '@angular/core';
       padding: 1rem;
       background: rgba(5, 8, 14, 0.7);
       overflow-y: auto;
-      animation: fade-in 0.18s ease-out;
-    }
-    @keyframes fade-in {
-      from {
-        opacity: 0;
-      }
-    }
-    @keyframes pop-in {
-      from {
-        opacity: 0;
-        transform: translateY(14px) scale(0.97);
-      }
     }
     .panel {
       width: min(560px, 100%);
@@ -45,7 +33,6 @@ import { Component, HostListener, input, output } from '@angular/core';
       border: 1px solid var(--line);
       background: var(--panel);
       box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6);
-      animation: pop-in 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
     }
     .panel.wide {
       width: min(780px, 100%);
@@ -61,6 +48,34 @@ export class Modal {
   readonly title = input('');
   readonly wide = input(false);
   readonly closed = output<void>();
+
+  /** Rendered: true while open and for a moment after closing (so the closing animation can play). */
+  protected readonly shown = signal(false);
+  protected readonly leaving = signal(false);
+  private readonly panel = viewChild<ElementRef<HTMLElement>>('panel');
+  private timer?: ReturnType<typeof setTimeout>;
+
+  constructor() {
+    effect(() => {
+      const open = this.open();
+      untracked(() => {
+        clearTimeout(this.timer);
+        if (open) {
+          this.shown.set(true);
+          this.leaving.set(false);
+        } else if (this.shown()) {
+          // keep the panel the same size while it fades, even if its content is already gone
+          const el = this.panel()?.nativeElement;
+          if (el) el.style.minHeight = `${el.offsetHeight}px`;
+          this.leaving.set(true);
+          this.timer = setTimeout(() => {
+            this.shown.set(false);
+            this.leaving.set(false);
+          }, 170);
+        }
+      });
+    });
+  }
 
   @HostListener('document:keydown.escape')
   onEscape(): void {

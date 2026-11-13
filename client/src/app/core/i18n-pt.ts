@@ -1,6 +1,7 @@
 /** Portuguese (Brazil) translations; the key is the English text. Missing keys simply show in English. */
 export const PT: Record<string, string> = {
   // ---- general
+  'Copied to the clipboard': 'Copiado para a área de transferência',
   'Menu': 'Menu',
   'Temporary invites': 'Convites temporários',
   'Temporary invite': 'Convite temporário',

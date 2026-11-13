@@ -40,7 +40,7 @@ import { Modal } from '../../shared/modal';
         }
         <div class="modal-actions">
           <button class="btn" type="button" (click)="createOpen.set(false)">{{ 'Cancel' | t }}</button>
-          <button class="btn primary" type="submit" [disabled]="busy() || !newName.trim()">{{ 'Create preset' | t }}</button>
+          <button class="btn primary" type="submit" [class.busy]="busy()" [disabled]="busy() || !newName.trim()">{{ 'Create preset' | t }}</button>
         </div>
       </form>
     </app-modal>
@@ -49,7 +49,14 @@ import { Modal } from '../../shared/modal';
       <p class="error">{{ error() | t }}</p>
     }
 
-    <div class="card">
+    @if (!loaded()) {
+      <div class="card" aria-busy="true">
+        <div class="skeleton row"></div>
+        <div class="skeleton row"></div>
+        <div class="skeleton row short"></div>
+      </div>
+    }
+    <div class="card" [class.is-loading]="!loaded()">
       <div class="table-wrap">
         <table class="list stack">
           <thead><tr><th>{{ 'Preset' | t }}</th><th>{{ 'Limits' | t }}</th><th>{{ 'Users' | t }}</th><th></th></tr></thead>
@@ -174,11 +181,15 @@ export class Presets implements OnInit {
     if (def) this.newLimits.set({ ...def.limits });
   }
 
+  protected readonly loaded = signal(false);
+
   private async load(): Promise<void> {
     try {
       this.presets.set((await this.api.get<{ presets: Preset[] }>('/api/admin/presets')).presets);
     } catch (e: any) {
       this.error.set(e.message);
+    } finally {
+      this.loaded.set(true);
     }
   }
 

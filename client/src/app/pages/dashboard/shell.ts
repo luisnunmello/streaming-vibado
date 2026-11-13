@@ -55,7 +55,7 @@ import { StreamerService } from '../../core/streamer.service';
         }
       </div>
       @if (auth.me() && !auth.me()?.restricted) {
-        <button type="button" class="btn small primary share" [disabled]="sharing" (click)="share()" [title]="'Go straight to your studio and pick a screen to share' | t">{{ 'Share screen' | t }}</button>
+        <button type="button" class="btn small primary share" [class.pulsing]="streamer.state() === 'live'" [disabled]="sharing" (click)="share()" [title]="'Go straight to your studio and pick a screen to share' | t">{{ 'Share screen' | t }}</button>
       }
       <button type="button" class="burger" [class.open]="menuOpen()" [attr.aria-expanded]="menuOpen()" [attr.aria-label]="'Menu' | t" (click)="menuOpen.set(!menuOpen())">
         <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
@@ -222,6 +222,7 @@ import { StreamerService } from '../../core/streamer.service';
     header {
       position: relative;
     }
+    /* ANIM:menu-icon */
     .burger svg {
       animation: burger-turn 0.25s ease;
     }
@@ -312,6 +313,7 @@ import { StreamerService } from '../../core/streamer.service';
       }
       .menu {
         display: flex;
+        /* ANIM:menu-slide (closed state + transition) */
         visibility: hidden;
         opacity: 0;
         transform: translateX(28px);
@@ -327,6 +329,7 @@ import { StreamerService } from '../../core/streamer.service';
         background: var(--panel);
         overflow-y: auto;
       }
+      /* ANIM:menu-slide (open state) */
       .menu.open {
         visibility: visible;
         opacity: 1;

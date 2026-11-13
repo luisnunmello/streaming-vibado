@@ -21,7 +21,7 @@ import { formatBytes } from '../../core/util';
               <label for="nick">{{ 'Name' | t }}</label>
               <input id="nick" type="text" name="nick" [(ngModel)]="nick" maxlength="24" autocomplete="username" required />
             </div>
-            <button class="btn primary" type="submit" [disabled]="busy() || !nick.trim() || nick.trim() === m.name">{{ 'Change name' | t }}</button>
+            <button class="btn primary" type="submit" [class.busy]="busy()" [disabled]="busy() || !nick.trim() || nick.trim() === m.name">{{ 'Change name' | t }}</button>
             @if (nameMsg()) {
               <p class="muted msg">{{ nameMsg() }}</p>
             }

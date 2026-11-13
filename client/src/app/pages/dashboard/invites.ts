@@ -63,7 +63,7 @@ import { Modal } from '../../shared/modal';
         }
         <div class="modal-actions">
           <button type="button" class="btn" (click)="newOpen.set(false)">{{ 'Cancel' | t }}</button>
-          <button type="submit" class="btn primary" [disabled]="busy() || !roomId">{{ 'Create invite' | t }}</button>
+          <button type="submit" class="btn primary" [class.busy]="busy()" [disabled]="busy() || !roomId">{{ 'Create invite' | t }}</button>
         </div>
       </form>
     </app-modal>

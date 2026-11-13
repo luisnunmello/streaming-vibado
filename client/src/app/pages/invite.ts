@@ -27,7 +27,7 @@ import { Topbar } from '../shared/topbar';
           @if (error()) {
             <p class="error">{{ error() | t }}</p>
           }
-          <button type="button" class="btn primary wide" [disabled]="busy()" (click)="accept()">{{ 'Accept the invite' | t }}</button>
+          <button type="button" class="btn primary wide" [class.busy]="busy()" [disabled]="busy()" (click)="accept()">{{ 'Accept the invite' | t }}</button>
         } @else {
           <h1>{{ 'Invite not available' | t }}</h1>
           <p class="muted">{{ 'This invite is invalid, expired or already used' | t }}</p>

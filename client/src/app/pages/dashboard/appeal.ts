@@ -24,7 +24,7 @@ import { AuthService } from '../../core/auth.service';
               <label for="appeal">{{ 'Why should the restriction be lifted?' | t }}</label>
               <textarea id="appeal" name="appeal" rows="4" maxlength="1000" [(ngModel)]="text" required></textarea>
             </div>
-            <button class="btn primary" type="submit" [disabled]="busy() || text.trim().length < 5">{{ 'Send appeal' | t }}</button>
+            <button class="btn primary" type="submit" [class.busy]="busy()" [disabled]="busy() || text.trim().length < 5">{{ 'Send appeal' | t }}</button>
             @if (error()) {
               <p class="error msg">{{ error() | t }}</p>
             }

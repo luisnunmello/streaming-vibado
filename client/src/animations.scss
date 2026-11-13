@@ -1,0 +1,221 @@
+/*
+ * ANIMATIONS: every purely visual animation of the app lives in this file.
+ * See docs/animations.md for the list and for how to remove them.
+ *
+ * Quick switch without deleting anything: set data-motion="off" on <html>
+ * (index.html), or remove the `@use 'animations';` line at the top of styles.scss.
+ */
+
+/* ---------- shared keyframes ---------- */
+@keyframes anim-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes anim-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+@keyframes anim-rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+@keyframes anim-pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.97);
+  }
+}
+@keyframes anim-pop-out {
+  to {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+}
+@keyframes anim-bounce-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.08);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+@keyframes anim-drop {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.98);
+  }
+}
+@keyframes anim-ring {
+  0% {
+    box-shadow: 0 0 0 0 rgba(255, 91, 77, 0.55);
+  }
+  70%,
+  100% {
+    box-shadow: 0 0 0 9px rgba(255, 91, 77, 0);
+  }
+}
+@keyframes anim-ring-accent {
+  0% {
+    box-shadow: 0 0 0 0 rgba(124, 156, 255, 0.55);
+  }
+  70%,
+  100% {
+    box-shadow: 0 0 0 10px rgba(124, 156, 255, 0);
+  }
+}
+@keyframes anim-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes anim-shimmer {
+  to {
+    background-position: -200% 0;
+  }
+}
+@keyframes anim-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+}
+
+/* ---------- 1. modals: opening and closing (the Modal component adds .leaving) ---------- */
+.modal-backdrop {
+  animation: anim-fade-in 0.18s ease-out;
+}
+.modal-panel {
+  animation: anim-pop-in 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.modal-backdrop.leaving {
+  animation: anim-fade-out 0.16s ease-in forwards !important;
+}
+.modal-panel.leaving {
+  animation: anim-pop-out 0.16s ease-in forwards !important;
+}
+
+/* ---------- 2. page changes ---------- */
+main.page > :not(router-outlet) {
+  animation: anim-rise 0.28s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+/* ---------- 3. rows and cards appear (only new ones: lists are tracked by id) ---------- */
+table.list tbody tr:not(.edit) {
+  animation: anim-rise 0.32s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+@for $i from 1 through 10 {
+  table.list tbody tr:not(.edit):nth-child(#{$i}) {
+    animation-delay: #{($i - 1) * 35}ms;
+  }
+}
+tr.edit {
+  animation: anim-fade-in 0.2s ease-out;
+}
+
+/* ---------- 4. buttons ---------- */
+.btn {
+  transition:
+    transform 0.12s ease,
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+  &:hover:not(:disabled) {
+    transform: translateY(-1px);
+  }
+  &:active:not(:disabled) {
+    transform: translateY(0) scale(0.97);
+  }
+  /* a button that is working shows a small spinner */
+  &.busy {
+    position: relative;
+    pointer-events: none;
+    &::after {
+      content: '';
+      display: inline-block;
+      width: 0.85em;
+      height: 0.85em;
+      margin-left: 0.55em;
+      vertical-align: -0.1em;
+      border: 2px solid currentColor;
+      border-right-color: transparent;
+      border-radius: 50%;
+      animation: anim-spin 0.7s linear infinite;
+    }
+  }
+}
+
+/* ---------- 5. status changes ---------- */
+.badge.live,
+.pill.live {
+  animation: anim-ring 1.8s ease-out infinite;
+}
+
+/* ---------- 6. live indicators ---------- */
+.btn.share.pulsing {
+  animation: anim-ring-accent 2s ease-out infinite;
+}
+.livechip {
+  animation: anim-fade-in 0.3s ease-out;
+}
+
+/* ---------- 7. dropdowns ---------- */
+.more[open] .menu {
+  animation: anim-drop 0.16s cubic-bezier(0.2, 0.8, 0.2, 1);
+  transform-origin: top right;
+}
+
+/* ---------- 8. viewer page ---------- */
+.stage .stats {
+  animation: anim-rise 0.2s ease-out;
+}
+.stage .unmute {
+  animation: anim-bounce-in 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.stage .owner {
+  animation: anim-fade-in 0.2s ease-out;
+}
+
+/* ---------- 9. toasts (ToastHost) ---------- */
+.toast-stack .toast-item {
+  animation: anim-toast-in 0.24s cubic-bezier(0.2, 0.8, 0.2, 1);
+  &.leaving {
+    animation: anim-fade-out 0.2s ease-in forwards;
+  }
+}
+
+/* ---------- 10. loading placeholders ---------- */
+.skeleton {
+  border-radius: 8px;
+  background: linear-gradient(90deg, var(--panel-2) 25%, #232c42 50%, var(--panel-2) 75%);
+  background-size: 200% 100%;
+  animation: anim-shimmer 1.4s linear infinite;
+  &.row {
+    height: 2.6rem;
+    margin: 0.6rem 0;
+  }
+  &.short {
+    width: 60%;
+  }
+}
+.is-loading {
+  display: none !important;
+}
+
+/* ---------- master switch ---------- */
+html[data-motion='off'] {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
