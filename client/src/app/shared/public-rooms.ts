@@ -14,57 +14,53 @@ import type { LobbyRoom } from '../core/models';
       @if (loaded() && rooms().length === 0) {
         <p class="muted">{{ 'There are no public rooms yet.' | t }}</p>
       }
-      <div class="grid">
-        @for (r of rooms(); track r.slug) {
-          <a class="room" [routerLink]="['/r', r.slug]">
-            <div class="row">
-              <h2>{{ i18n.roomName(r) }}</h2>
-              <span class="spacer"></span>
-              @if (r.live) {
-                <span class="badge live">{{ 'LIVE' | t }}</span>
-              }
-            </div>
-            <p class="muted">{{ 'by {name}' | t: { name: r.ownerName } }}</p>
-            <p class="meta">
-              @if (r.live) {
-                {{ '{n} watching' | t: { n: r.viewers } }}
-              } @else {
-                {{ 'Offline' | t }}
-              }
-            </p>
-          </a>
-        }
-      </div>
+      @if (rooms().length > 0) {
+        <div class="card">
+          <div class="table-wrap">
+            <table class="list">
+              <thead>
+                <tr>
+                  <th>{{ 'Room' | t }}</th>
+                  <th>{{ 'Owner' | t }}</th>
+                  <th>{{ 'Status' | t }}</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (r of rooms(); track r.slug) {
+                  <tr>
+                    <td>
+                      <b>{{ i18n.roomName(r) }}</b>
+                      <div class="muted slug">/r/{{ r.slug }}</div>
+                    </td>
+                    <td>{{ r.ownerName }}</td>
+                    <td>
+                      @if (r.live) {
+                        <span class="badge live">{{ 'LIVE' | t }}</span> <span class="muted">{{ '{n} watching' | t: { n: r.viewers } }}</span>
+                      } @else {
+                        <span class="muted">{{ 'offline' | t }}</span>
+                      }
+                    </td>
+                    <td class="right">
+                      <a class="btn small primary" [routerLink]="['/r', r.slug]">{{ 'Watch' | t }}</a>
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        </div>
+      }
   `,
   styles: `
-    .grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-      gap: 1rem;
+    .slug {
+      font-size: 0.8rem;
     }
-    .room {
-      display: block;
-      padding: 1rem 1.1rem;
-      border-radius: var(--radius);
-      border: 1px solid var(--line);
-      background: var(--panel);
-      color: var(--text);
+    .right {
+      text-align: right;
+    }
+    a.btn {
       text-decoration: none;
-      transition: border-color 0.15s;
-      &:hover {
-        border-color: var(--accent);
-      }
-      h2 {
-        margin: 0;
-        font-size: 1.05rem;
-      }
-      p {
-        margin: 0.35rem 0 0;
-        font-size: 0.9rem;
-      }
-      .meta {
-        color: var(--text);
-      }
     }
   `,
 })

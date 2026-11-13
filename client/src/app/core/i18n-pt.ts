@@ -1,6 +1,7 @@
 /** Portuguese (Brazil) translations; the key is the English text. Missing keys simply show in English. */
 export const PT: Record<string, string> = {
   // ---- general
+  'Watch': 'Assistir',
   ' (default)': ' (padrão)',
   'user': 'usuário',
   '{n} room': '{n} sala',

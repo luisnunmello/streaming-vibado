@@ -133,8 +133,6 @@ import { absoluteUrl, copyText } from '../../core/util';
       </div>
     </div>
 
-    <h2 class="section">{{ 'Public rooms' | t }}</h2>
-    <app-public-rooms />
     }
   `,
   styles: `
@@ -144,10 +142,6 @@ import { absoluteUrl, copyText } from '../../core/util';
       justify-content: space-between;
       gap: 1rem;
       flex-wrap: wrap;
-    }
-    .section {
-      margin: 1.6rem 0 0.8rem;
-      font-size: 1.1rem;
     }
     .autoname {
       flex: 1;
