@@ -107,7 +107,7 @@ const CUSTOM = 'custom';
         <table class="list">
           <thead>
             <tr>
-              <th class="chk"><input type="checkbox" aria-label="Select all users" [checked]="allSelected()" (change)="toggleAll($any($event.target).checked)" /></th><th>User</th><th>Status</th><th>Limits</th><th>Invited by</th><th>Rooms</th><th>Referrals</th><th>This month</th><th>Last seen</th><th></th>
+              <th class="chk"><input type="checkbox" aria-label="Select all users" [checked]="allSelected()" (change)="toggleAll($any($event.target).checked)" /></th><th>User</th><th>Status</th><th>Limits</th><th>Referred by</th><th>Rooms</th><th>Referrals</th><th>This month</th><th>Last seen</th><th></th>
             </tr>
           </thead>
           <tbody>
@@ -125,7 +125,7 @@ const CUSTOM = 'custom';
                     <span class="badge warn" title="Not following a preset">custom</span>
                   }
                 </td>
-                <td class="muted">{{ u.invitedByName ?? '–' }}</td>
+                <td class="muted">{{ u.invitedByName ?? 'Admin' }}</td>
                 <td>{{ u.rooms }}@if (u.liveRooms) { <span class="badge live">{{ u.liveRooms }} live</span> }</td>
                 <td>{{ u.referralsUsed }} / {{ u.referralQuota }}</td>
                 <td>{{ fmt(u.monthBytes) }}</td>
@@ -162,7 +162,7 @@ const CUSTOM = 'custom';
                         <app-limits-editor [limits]="l" (limitsChange)="editUser($event)" />
                       }
                       @if (u.invitedByName) {
-                        <p class="muted hint">Invited by {{ u.invitedByName }}, so these limits can never go above theirs.</p>
+                        <p class="muted hint">Referred by {{ u.invitedByName }}, so these limits can never go above theirs.</p>
                       }
                       <div class="row actions">
                         <button type="button" class="btn primary small" (click)="save(u)">Save changes</button>

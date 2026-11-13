@@ -14,7 +14,7 @@ import { formatBytes } from '../../core/util';
       @if (auth.me(); as me) {
         <div class="card">
           <h2>{{ me.role === 'admin' ? 'Administrator' : 'Your account' }}</h2>
-          <p><b>{{ me.name }}</b>@if (me.invitedByName) { <span class="muted"> · invited by {{ me.invitedByName }}</span> }</p>
+          <p><b>{{ me.name }}</b>@if (me.invitedByName) { <span class="muted"> · referred by {{ me.invitedByName }}</span> }</p>
 
           @if (me.limits; as l) {
             <table class="list">
