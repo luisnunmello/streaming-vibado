@@ -31,7 +31,7 @@ before(async () => {
   db.exec(V1_SCHEMA);
   const limits = { maxRooms: 9, maxStreams: 2, maxBitrateMbps: 3, maxHeight: 720, maxFps: 30, maxViewersPerRoom: 10, maxStreamMinutes: 120, allowPublicRooms: true, allowAudio: true, monthlyGb: 0 };
   db.prepare("INSERT INTO guests (name, status, limits, referral_quota, created_at) VALUES ('old-user', 'pending', ?, 3, ?)").run(JSON.stringify(limits), Date.now());
-  db.prepare("INSERT INTO rooms (id, slug, name, owner_id, visibility, secret, created_at) VALUES ('r1', 'old-room-abcd', 'Old room', 1, 'public', 's', ?)").run(Date.now());
+  db.prepare("INSERT INTO rooms (id, slug, name, owner_id, visibility, secret, created_at) VALUES ('r1', 'old-room-abcd', 'Old room', 1, 'private', 's', ?)").run(Date.now());
   db.prepare("INSERT INTO usage (guest_id, month, bytes) VALUES (1, '2026-01', 12345)").run();
   db.prepare("INSERT INTO settings (key, value) VALUES ('global', ?)").run(
     JSON.stringify({ egressBudgetMbps: 321, guestStreamsPaused: true, defaultLimits: { ...limits, maxBitrateMbps: 7 } }),

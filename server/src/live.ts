@@ -7,7 +7,7 @@ import { config } from './config.js';
 import { getSession, onRevoke, type Principal } from './auth.js';
 import { getGlobals } from './globals.js';
 import type { Limits } from './limits.js';
-import { getRoomBySlug, type Room } from './rooms.js';
+import { deleteRoom, getRoomById, getRoomBySlug, type Room } from './rooms.js';
 import type { Sfu } from './sfu.js';
 
 type Ack = (res: { ok: true; [k: string]: unknown } | { ok: false; error: string }) => void;
@@ -64,6 +64,8 @@ const spatialLayersOf = (c: types.Consumer): number => {
   const m = typeof mode === 'string' ? /^[LS](\d)/.exec(mode) : null;
   return m ? Number(m[1]) : 1;
 };
+
+const OWNER_GRACE_MS = Number(process.env['OWNER_GRACE_MS']) || 15_000;
 
 export class LiveService {
   readonly runtimes = new Map<string, RoomRuntime>();
@@ -496,7 +498,10 @@ export class LiveService {
     if (rt) {
       peer.socket.leave(`v:${rt.room.id}`);
       peer.socket.leave(`o:${rt.room.id}`);
-      if (peer.isOwner && rt.ownerSocketId === peer.socket.id) rt.ownerSocketId = null;
+      if (peer.isOwner && rt.ownerSocketId === peer.socket.id) {
+        rt.ownerSocketId = null;
+        this.scheduleOwnerGone(rt.room.id);
+      }
       rt.viewerIds.delete(peer.socket.id);
       this.emitViewerCount(rt);
       this.maybeDestroy(rt);
@@ -504,6 +509,20 @@ export class LiveService {
     peer.roomId = null;
     peer.isOwner = false;
     peer.admitted = false;
+  }
+
+  /**
+   * Public rooms exist only while their owner is online. A short grace period lets a page reload or a
+   * reconnect keep the room; the permanent main room is never removed.
+   */
+  private scheduleOwnerGone(roomId: string): void {
+    setTimeout(() => {
+      const room = getRoomById(roomId);
+      if (!room || room.visibility !== 'public' || room.slug === 'main') return;
+      if (this.runtimes.get(roomId)?.ownerSocketId) return; // the owner came back
+      this.closeRoom(roomId, 'The owner went offline, so this public room was removed');
+      deleteRoom(roomId);
+    }, OWNER_GRACE_MS).unref();
   }
 
   private onStreamStopped(rt: RoomRuntime): void {

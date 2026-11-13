@@ -8,7 +8,7 @@ import { buildApi } from './api.js';
 import { BudgetManager } from './budget.js';
 import { config } from './config.js';
 import { LiveService } from './live.js';
-import { ensureMainRoom } from './rooms.js';
+import { ensureMainRoom, purgePublicRooms } from './rooms.js';
 import { initSettings } from './settings.js';
 import { startSfu } from './sfu.js';
 
@@ -20,6 +20,7 @@ if (generated) {
   console.log('================================================================\n');
 }
 ensureMainRoom();
+purgePublicRooms();
 
 const app = express();
 if (config.trustProxy) app.set('trust proxy', /^\d+$/.test(config.trustProxy) ? Number(config.trustProxy) : config.trustProxy);

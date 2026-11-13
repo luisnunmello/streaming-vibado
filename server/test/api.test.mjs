@@ -39,7 +39,7 @@ async function join(slug, { token, key } = {}) {
 
 before(async () => {
   server = spawn(process.execPath, ['--import', 'tsx', 'src/index.ts'], {
-    env: { ...process.env, DATA_DIR: dataDir, PORT: String(PORT), RTC_PORT: String(RTC_PORT), ADMIN_PASSWORD: 'master-pass-1', MEDIASOUP_ANNOUNCED_IP: '127.0.0.1' },
+    env: { ...process.env, DATA_DIR: dataDir, PORT: String(PORT), RTC_PORT: String(RTC_PORT), ADMIN_PASSWORD: 'master-pass-1', MEDIASOUP_ANNOUNCED_IP: '127.0.0.1', OWNER_GRACE_MS: '400' },
     stdio: 'ignore',
   });
   for (let i = 0; i < 60; i++) {
@@ -426,5 +426,39 @@ describe('limit presets', () => {
     assert.equal((await meOf(u.token)).limits.maxFps, 15);
     const users = (await api('GET', '/api/admin/users', { token: admin })).users;
     assert.equal(users.find((x) => x.id === u.id).presetId, null);
+  });
+});
+
+describe('public rooms only exist while their owner is online', () => {
+  it('removes a public room shortly after its owner disconnects, but never the main room', async () => {
+    const admin = await login('admin', 'new-master-pass-1');
+    const made = await api('POST', '/api/rooms', { token: admin, body: { name: 'Temporary', visibility: 'public' } });
+    assert.equal(made.status, 201);
+    const slug = made.room.slug;
+    const owner = await join(slug, { token: admin });
+    const viewer = await join(slug);
+    assert.equal(owner.reply.role, 'owner');
+    const kicked = new Promise((resolve) => viewer.socket.on('kicked', resolve));
+
+    owner.socket.close();
+    await new Promise((r) => setTimeout(r, 150));
+    assert.equal((await api('GET', `/api/rooms/${slug}/info`)).status, 200, 'still there during the grace period');
+
+    await kicked;
+    await new Promise((r) => setTimeout(r, 300));
+    assert.equal((await api('GET', `/api/rooms/${slug}/info`)).status, 404, 'removed once the owner stayed away');
+    assert.equal((await api('GET', '/api/rooms/main/info')).status, 200, 'the main room stays');
+    viewer.socket.close();
+  });
+
+  it('keeps the room when the owner comes back within the grace period', async () => {
+    const admin = await login('admin', 'new-master-pass-1');
+    const { room } = await api('POST', '/api/rooms', { token: admin, body: { name: 'Reload', visibility: 'public' } });
+    const first = await join(room.slug, { token: admin });
+    first.socket.close();
+    const second = await join(room.slug, { token: admin });
+    await new Promise((r) => setTimeout(r, 800));
+    assert.equal((await api('GET', `/api/rooms/${room.slug}/info`)).status, 200);
+    second.socket.close();
   });
 });

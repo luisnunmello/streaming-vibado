@@ -132,6 +132,13 @@ export function deleteRoom(id: string): void {
   run('DELETE FROM rooms WHERE id = ?', id);
 }
 
+/** Public rooms only live while their owner is online: nobody is online at startup, so they all go. */
+export function purgePublicRooms(): number {
+  const rows = all<{ id: string }>("SELECT id FROM rooms WHERE visibility = 'public' AND slug <> 'main'");
+  for (const r of rows) run('DELETE FROM rooms WHERE id = ?', r.id);
+  return rows.length;
+}
+
 /** The admin's permanent room, served at /r/main. */
 export function ensureMainRoom(): Room {
   const existing = getRoomBySlug('main');
