@@ -59,8 +59,8 @@ export const RESOLUTIONS = [
 ];
 
 export const CODECS: { value: Codec; label: string; hint: string }[] = [
-  { value: 'h264', label: 'H.264', hint: 'Usually hardware encoded: lowest CPU use' },
-  { value: 'vp8', label: 'VP8', hint: 'Software encoded, very compatible' },
+  { value: 'h264', label: 'H.264', hint: 'Usually hardware encoded: lowest CPU use. If a viewer cannot play it, use VP8.' },
+  { value: 'vp8', label: 'VP8', hint: 'Plays in every browser. Software encoded, so heavier on CPU than H.264.' },
   { value: 'vp9', label: 'VP9', hint: 'Better quality per Mbps, heavier on CPU' },
   { value: 'av1', label: 'AV1', hint: 'Best quality per Mbps, heaviest on CPU' },
 ];

@@ -311,10 +311,11 @@ export class StreamerService {
       return fallback;
     }
     if (s.codec === 'h264') {
-      // Prefer High > Main > Baseline when several H.264 profiles are offered.
+      // Prefer Constrained Baseline (42e0..): every browser decodes it, Firefox decodes nothing higher.
+      // A High/Main stream would be refused for those viewers, since the server does not transcode.
       const rank = (c: types.RtpCodecCapability) => {
         const p = String(c.parameters?.['profile-level-id'] ?? '').toLowerCase();
-        return p.startsWith('64') ? 3 : p.startsWith('4d') ? 2 : 1;
+        return p.startsWith('42e') ? 3 : p.startsWith('42') ? 2 : 1;
       };
       return [...matches].sort((a, b) => rank(b) - rank(a))[0];
     }

@@ -72,7 +72,7 @@ The server also protects your connection as a whole: an upload budget with admis
 ## Streaming (studio)
 
 - **Video quality** (changeable while live): presets, frame rate, resolution, bitrate, and what to sacrifice when the machine or network can't keep up (*Keep smooth* drops resolution first, best for games; *Keep sharp* drops frame rate first, best for text). Guests are limited to their maximums.
-- **Codec** (set at start): H.264 is usually hardware-encoded (lowest CPU, best for 60 fps); VP8/VP9/AV1 give better quality per Mbps but use more CPU.
+- **Codec** (set at start): H.264 is usually hardware-encoded (lowest CPU, best for 60 fps) and is sent as Constrained Baseline, the profile every browser accepts. If some viewer's browser cannot decode it (for example a Firefox without OpenH264), use **VP8**, which plays everywhere. VP9/AV1 give better quality per Mbps but use more CPU. Guests default to VP8.
 - **Adaptive quality** (set at start): sends three quality levels so the server can lower quality for viewers instead of refusing them. On by default for guests.
 - **Audio:** screen audio (all / shared window only), plus an optional extra input (mic or virtual cable) mixed in, with volume sliders and a mute switch that work live.
 - **Live stats:** sent bitrate, fps, resolution, encode time, packet loss, RTT, and whether the encoder is limited by CPU or bandwidth.

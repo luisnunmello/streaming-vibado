@@ -307,7 +307,7 @@ export class LiveService {
       const rt = joined();
       const producer = rt.producers.get(producerId);
       if (!producer) throw new ClientError('Producer not found');
-      if (!rt.router.canConsume({ producerId, rtpCapabilities })) throw new ClientError('This browser cannot decode the stream codec');
+      if (!rt.router.canConsume({ producerId, rtpCapabilities })) throw new ClientError('Your browser cannot play this video format. The streamer can switch to VP8, which every browser plays.');
       if (!peer.isOwner && !peer.admitted) {
         if (!this.budget.admitViewer(rt)) throw new ClientError('The server is at full capacity right now. Please try again in a moment.');
         peer.admitted = true;

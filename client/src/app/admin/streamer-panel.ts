@@ -20,7 +20,7 @@ import {
 })
 export class StreamerPanel implements OnInit, OnDestroy {
   protected readonly s = inject(StreamerService);
-  protected readonly settings = signal<StreamSettings>(clampSettings(loadSettings({ adaptive: !!this.s.limits() }), this.s.limits()));
+  protected readonly settings = signal<StreamSettings>(clampSettings(loadSettings({ adaptive: !!this.s.limits(), codec: this.s.limits() ? 'vp8' : 'h264' }), this.s.limits()));
   protected readonly devices = signal<MediaDeviceInfo[]>([]);
   protected readonly presets = this.distinctPresets();
   protected readonly resolutions = resolutionOptions(this.s.limits());
