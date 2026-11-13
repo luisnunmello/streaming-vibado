@@ -7,14 +7,13 @@ import { AuthService } from '../../core/auth.service';
 import type { RoomView } from '../../core/models';
 import { I18nService, TPipe } from '../../core/i18n.service';
 import { ShareService } from '../../core/share.service';
-import { BrowserWarning } from '../../shared/browser-warning';
 import { Modal } from '../../shared/modal';
 import { PublicRooms } from '../../shared/public-rooms';
 import { absoluteUrl, copyText } from '../../core/util';
 
 @Component({
   selector: 'app-rooms',
-  imports: [FormsModule, RouterLink, TPipe, PublicRooms, Modal, BrowserWarning],
+  imports: [FormsModule, RouterLink, TPipe, PublicRooms, Modal],
   template: `
     @if (!auth.me()) {
       <h1 class="page-title">{{ 'Public rooms' | t }}</h1>
@@ -29,7 +28,6 @@ import { absoluteUrl, copyText } from '../../core/util';
       <button type="button" class="btn primary" [disabled]="sharing()" (click)="share()">{{ 'Share screen' | t }}</button>
     </div>
 
-    <app-browser-warning />
 
     @if (error() && !newOpen()) {
       <p class="error">{{ error() | t }}</p>
