@@ -15,6 +15,10 @@ export interface BugReport {
   reporter: string;
   page: string;
   userAgent: string;
+  /** App version the reporter was running. */
+  version: string;
+  /** App version that fixed it (set by the admin). */
+  fixedIn: string;
   status: BugStatus;
   adminNote: string;
   hasShot: boolean;
@@ -30,6 +34,8 @@ interface Row {
   reporter: string;
   page: string;
   user_agent: string;
+  version: string;
+  fixed_in: string;
   status: BugStatus;
   admin_note: string;
   has_shot: number;
@@ -45,6 +51,8 @@ const toReport = (r: Row): BugReport => ({
   reporter: r.reporter,
   page: r.page,
   userAgent: r.user_agent,
+  version: r.version,
+  fixedIn: r.fixed_in,
   status: r.status,
   adminNote: r.admin_note,
   hasShot: !!r.has_shot,
@@ -76,7 +84,10 @@ function parseShot(dataUrl: unknown): { mime: string; data: Buffer } {
   return { mime: m[1], data };
 }
 
-export function createBug(input: { title: unknown; description: unknown; screenshot?: unknown; reporter: string; page: unknown; userAgent: unknown }): BugReport {
+/** Versions look like 1.2.3 (anything else is ignored, so reports can't carry junk). */
+export const cleanVersion = (v: unknown): string => (typeof v === 'string' && /^\d{1,4}\.\d{1,4}\.\d{1,4}$/.test(v.trim()) ? v.trim() : '');
+
+export function createBug(input: { version?: unknown; title: unknown; description: unknown; screenshot?: unknown; reporter: string; page: unknown; userAgent: unknown }): BugReport {
   const title = text(input.title, 'The title', 3, 100);
   const description = text(input.description, 'The description', 5, 2000);
   const shot = input.screenshot ? parseShot(input.screenshot) : null;
@@ -86,12 +97,13 @@ export function createBug(input: { title: unknown; description: unknown; screens
   const now = Date.now();
   const id = tx(() => {
     const r = run(
-      'INSERT INTO bug_reports (title, description, reporter, page, user_agent, has_shot, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      'INSERT INTO bug_reports (title, description, reporter, page, user_agent, version, has_shot, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
       title,
       description,
       input.reporter,
       page,
       userAgent,
+      cleanVersion(input.version),
       shot ? 1 : 0,
       now,
       now,
@@ -113,12 +125,15 @@ export const countOpenBugs = (): number => get<{ n: number }>("SELECT COUNT(*) A
 
 export const getShot = (id: number): { mime: string; data: Buffer } | undefined => get<{ mime: string; data: Buffer }>('SELECT mime, data FROM bug_shots WHERE bug_id = ?', id);
 
-export function updateBug(id: number, patch: { title?: unknown; description?: unknown; adminNote?: unknown; status?: unknown }): BugReport {
+export function updateBug(id: number, patch: { title?: unknown; description?: unknown; adminNote?: unknown; status?: unknown; fixedIn?: unknown; version?: unknown }): BugReport {
   const cur = getBug(id);
   if (!cur) throw new HttpError(404, 'Report not found');
   const title = patch.title === undefined ? cur.title : text(patch.title, 'The title', 3, 100);
   const description = patch.description === undefined ? cur.description : text(patch.description, 'The description', 5, 2000);
   const adminNote = patch.adminNote === undefined ? cur.adminNote : typeof patch.adminNote === 'string' ? patch.adminNote.trim().slice(0, 1000) : '';
+  const fixedIn = patch.fixedIn === undefined ? cur.fixedIn : cleanVersion(patch.fixedIn);
+  if (patch.fixedIn !== undefined && patch.fixedIn !== '' && !fixedIn) throw new HttpError(400, 'The fixed-in version must look like 1.2.3');
+  const version = patch.version === undefined ? cur.version : cleanVersion(patch.version);
   let status = cur.status;
   if (patch.status !== undefined) {
     if (patch.status !== 'open' && patch.status !== 'solved') throw new HttpError(400, 'Invalid status');
@@ -126,7 +141,7 @@ export function updateBug(id: number, patch: { title?: unknown; description?: un
   }
   const now = Date.now();
   const solvedAt = status === 'solved' ? (cur.status === 'solved' ? cur.solvedAt : now) : null;
-  run('UPDATE bug_reports SET title = ?, description = ?, admin_note = ?, status = ?, solved_at = ?, updated_at = ? WHERE id = ?', title, description, adminNote, status, solvedAt, now, id);
+  run('UPDATE bug_reports SET title = ?, description = ?, admin_note = ?, version = ?, fixed_in = ?, status = ?, solved_at = ?, updated_at = ? WHERE id = ?', title, description, adminNote, version, fixedIn, status, solvedAt, now, id);
   return getBug(id)!;
 }
 

@@ -195,6 +195,15 @@ if (version < 8) {
   `);
 }
 
+if (version < 9) {
+  // Which app version a bug was seen in, and the version that fixed it.
+  db.exec(`
+    ALTER TABLE bug_reports ADD COLUMN version TEXT NOT NULL DEFAULT '';
+    ALTER TABLE bug_reports ADD COLUMN fixed_in TEXT NOT NULL DEFAULT '';
+    PRAGMA user_version = 9;
+  `);
+}
+
 export function all<T>(sql: string, ...params: SQLInputValue[]): T[] {
   return db.prepare(sql).all(...params) as T[];
 }

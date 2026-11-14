@@ -2,19 +2,23 @@ import { Component, effect, inject, signal, DestroyRef } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { AuthService } from '../core/auth.service';
 import { TPipe } from '../core/i18n.service';
+import { APP_VERSION } from '../core/version';
+import { BugReport } from './bug-report';
 import { LangSwitch } from './lang-switch';
 
 @Component({
   selector: 'app-topbar',
-  imports: [RouterLink, LangSwitch, TPipe],
+  imports: [RouterLink, BugReport, LangSwitch, TPipe],
   template: `
     <header>
       <a routerLink="/" class="brand">{{ 'Streaming' | t }}</a>
+      <span class="ver" [title]="'App version' | t">v{{ version }}</span>
       <div class="menu" [class.open]="open()" (click)="open.set(false)">
         <nav>
           <a routerLink="/dashboard/rooms">{{ 'Public rooms' | t }}</a>
         </nav>
         <span class="spacer"></span>
+        <app-bug-report />
         <app-lang-switch (click)="$event.stopPropagation()" />
         @if (auth.me(); as me) {
           <a routerLink="/dashboard" class="btn small">{{ me.name }} · {{ 'Dashboard' | t }}</a>
@@ -48,6 +52,10 @@ import { LangSwitch } from './lang-switch';
       color: var(--text);
       text-decoration: none;
       font-size: 1.05rem;
+    }
+    .ver {
+      color: var(--muted);
+      font-size: 0.75rem;
     }
     nav a,
     .link {
@@ -156,6 +164,7 @@ import { LangSwitch } from './lang-switch';
 })
 export class Topbar {
   protected readonly auth = inject(AuthService);
+  protected readonly version = APP_VERSION;
   protected readonly open = signal(false);
   private readonly lockScroll = effect(() => {
     document.body.style.overflow = this.open() ? 'hidden' : '';

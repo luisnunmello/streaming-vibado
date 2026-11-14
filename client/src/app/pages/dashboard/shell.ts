@@ -8,15 +8,18 @@ import { DialogService } from '../../core/dialog.service';
 import { I18nService, TPipe } from '../../core/i18n.service';
 import { ShareService } from '../../core/share.service';
 import { SoundService } from '../../core/sound.service';
+import { APP_VERSION } from '../../core/version';
+import { BugReport } from '../../shared/bug-report';
 import { LangSwitch } from '../../shared/lang-switch';
 import { StreamerService } from '../../core/streamer.service';
 
 @Component({
   selector: 'app-shell',
-  imports: [RouterLink, RouterLinkActive, RouterOutlet, Account, Appeal, LangSwitch, TPipe],
+  imports: [RouterLink, RouterLinkActive, RouterOutlet, Account, Appeal, BugReport, LangSwitch, TPipe],
   template: `
     <header>
       <a routerLink="/" class="brand">{{ 'Streaming' | t }}</a>
+      <span class="ver" [title]="'App version' | t">v{{ version }}</span>
       <div class="menu" [class.open]="menuOpen()" (click)="menuOpen.set(false)">
         <nav>
           <a routerLink="/dashboard/rooms" routerLinkActive="on">{{ 'Rooms' | t }}</a>
@@ -30,6 +33,7 @@ import { StreamerService } from '../../core/streamer.service';
             <a routerLink="/dashboard/users" routerLinkActive="on">{{ 'Users' | t }}@if ((auth.me()?.pendingAppeals ?? 0) > 0) { <span class="badge warn" [title]="'Appeals waiting for an answer' | t">{{ auth.me()?.pendingAppeals }}</span> }</a>
             <a routerLink="/dashboard/presets" routerLinkActive="on">{{ 'Presets' | t }}</a>
             <a routerLink="/dashboard/bandwidth" routerLinkActive="on">{{ 'Bandwidth' | t }}</a>
+            <a routerLink="/dashboard/bugs" routerLinkActive="on">{{ 'Bug reports' | t }}@if ((auth.me()?.openBugs ?? 0) > 0) { <span class="badge warn" [title]="'Open bug reports' | t">{{ auth.me()?.openBugs }}</span> }</a>
           }
           @if (auth.me() && auth.me()?.role !== 'guest') {
             <a routerLink="/dashboard/account" routerLinkActive="on">{{ 'Account' | t }}</a>
@@ -50,6 +54,7 @@ import { StreamerService } from '../../core/streamer.service';
             }
           </svg>
         </button>
+        <app-bug-report />
         <app-lang-switch (click)="$event.stopPropagation()" />
         @if (auth.me()) {
           @if (auth.me()?.guest; as g) {
@@ -167,6 +172,10 @@ import { StreamerService } from '../../core/streamer.service';
       padding: 0.7rem 1.2rem;
       border-bottom: 1px solid var(--line);
       background: var(--panel);
+    }
+    .ver {
+      color: var(--muted);
+      font-size: 0.75rem;
     }
     .brand {
       font-weight: 700;
@@ -441,6 +450,7 @@ import { StreamerService } from '../../core/streamer.service';
   `,
 })
 export class Shell implements OnInit, OnDestroy {
+  protected readonly version = APP_VERSION;
   protected readonly auth = inject(AuthService);
   protected readonly streamer = inject(StreamerService);
   private readonly api = inject(ApiService);

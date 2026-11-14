@@ -3,6 +3,7 @@ import { adminGuard, authGuard, loadAuthGuard, userGuard } from './core/guards';
 import { Activate } from './pages/activate';
 import { Account } from './pages/dashboard/account';
 import { Bandwidth } from './pages/dashboard/bandwidth';
+import { Bugs } from './pages/dashboard/bugs';
 import { Users } from './pages/dashboard/users';
 import { Referrals } from './pages/dashboard/referrals';
 import { Presets } from './pages/dashboard/presets';
@@ -36,6 +37,7 @@ export const routes: Routes = [
       { path: 'users', component: Users, canActivate: [adminGuard] },
       { path: 'presets', component: Presets, canActivate: [adminGuard] },
       { path: 'bandwidth', component: Bandwidth, canActivate: [adminGuard] },
+      { path: 'bugs', component: Bugs, canActivate: [adminGuard] },
     ],
   },
   { path: 'admin', redirectTo: 'dashboard' },

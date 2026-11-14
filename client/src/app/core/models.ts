@@ -30,6 +30,8 @@ export interface Me {
   appealReply?: string;
   /** Admin only: appeals waiting for an answer. */
   pendingAppeals?: number;
+  /** Admin only: bug reports not solved yet. */
+  openBugs?: number;
   /** Someone using a temporary invite. */
   guest?: { inviteId: number; endsAt: number; creatorName: string; room: RoomView };
 }

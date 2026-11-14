@@ -43,6 +43,7 @@ import type { LiveService } from './live.js';
 import { ADMIN_MAX_INVITE_MINUTES, activeInvite, createInvite, getInvite, listInvites, peekInvite, redeemInvite, revokeInvite, statusOf as inviteStatus, type Invite } from './invites.js';
 import { countOpenBugs, createBug, deleteBug, getShot, listBugs, removeShot, updateBug } from './bugs.js';
 import { notifyAdmin } from './notify.js';
+import { APP_VERSION } from './version.js';
 import { checkNewPassword } from './password.js';
 import { autoRoomName, countRooms, createRoom, deleteRoom, getRoomById, getRoomBySlug, listPublicRooms, listRooms, updateRoom, type Room } from './rooms.js';
 import { setPassword as setMasterPassword, verifyPassword as verifyMasterPassword } from './settings.js';
@@ -187,7 +188,7 @@ export function buildApi(live: LiveService, budget: BudgetManager): Router {
   // ---------------------------------------------------------------- public
 
   api.get('/health', (_req, res) => {
-    res.json({ ok: true });
+    res.json({ ok: true, version: APP_VERSION });
   });
 
   api.get(
