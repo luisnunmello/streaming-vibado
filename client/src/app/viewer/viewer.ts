@@ -8,6 +8,8 @@ import { StreamerService } from '../core/streamer.service';
 import { ViewerService, type Quality } from '../core/viewer.service';
 import { ControlBar } from '../shared/control-bar';
 
+const NICK_KEY = 'viewerNickname';
+
 @Component({
   selector: 'app-viewer',
   imports: [RouterLink, ControlBar, TPipe],
@@ -62,12 +64,54 @@ export class Viewer implements OnInit, OnDestroy {
     el.play().catch(() => undefined);
   });
 
+  // ---- who is watching
+  protected readonly showViewers = signal(false);
+  /** Anonymous visitor who has not picked a nickname yet: asked before joining. */
+  protected readonly askName = signal(false);
+  protected readonly nickInput = signal('');
+  private pending?: { slug: string; key?: string };
+
+  /** Anonymous visitors keep their name between visits (the one they typed, or the random one they were given). */
+  private readonly rememberName = effect(() => {
+    const name = this.v.myName();
+    if (name && !this.api.token()) {
+      try {
+        localStorage.setItem(NICK_KEY, name);
+      } catch {
+        /* storage blocked */
+      }
+    }
+  });
+
+  protected submitName(anonymous: boolean): void {
+    const p = this.pending;
+    if (!p) return;
+    const nick = anonymous ? '' : this.nickInput().trim();
+    this.askName.set(false);
+    this.v.start(p.slug, p.key, nick);
+  }
+
   ngOnInit(): void {
     this.sub = combineLatest([this.route.paramMap, this.route.queryParamMap]).subscribe(([params, query]) => {
       const slug = params.get('slug') ?? '';
       const key = query.get('key') ?? undefined;
       this.slug.set(slug);
-      this.v.start(slug, key);
+      let nick: string | null = null;
+      if (!this.api.token()) {
+        try {
+          nick = localStorage.getItem(NICK_KEY);
+        } catch {
+          /* storage blocked */
+        }
+      }
+      if (this.api.token() || nick) {
+        this.askName.set(false);
+        this.v.start(slug, key, nick ?? undefined);
+      } else {
+        this.pending = { slug, key };
+        this.v.stop();
+        this.askName.set(true);
+      }
       void this.checkOwnership(slug, key);
     });
     this.pingTimer = setInterval(() => this.mine() && this.remote.ping(), 3000);

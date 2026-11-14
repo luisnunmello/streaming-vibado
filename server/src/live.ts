@@ -9,6 +9,7 @@ import { getGlobals } from './globals.js';
 import type { Limits } from './limits.js';
 import { activeInvite } from './invites.js';
 import { autoRoomName, deleteRoom, getRoomById, getRoomBySlug, type Room } from './rooms.js';
+import { cleanNickname, randomNickname } from './names.js';
 import type { Sfu } from './sfu.js';
 
 type Ack = (res: { ok: true; [k: string]: unknown } | { ok: false; error: string }) => void;
@@ -34,6 +35,8 @@ export interface Peer {
   principal: Principal | null;
   roomId: string | null;
   isOwner: boolean;
+  /** Name shown in the room's viewer list. */
+  name: string;
   ip: string;
   /** True once this viewer has passed the bandwidth admission check for the current stream. */
   admitted: boolean;
@@ -60,6 +63,7 @@ export interface RoomRuntime {
   ingressBps: number;
   viewerTransports: Map<string, TrackedTransport>;
   ownerTransports: Map<string, TrackedTransport>;
+  listTimer?: ReturnType<typeof setTimeout>;
 }
 
 const spatialLayersOf = (c: types.Consumer): number => {
@@ -227,6 +231,7 @@ export class LiveService {
       principal,
       roomId: null,
       isOwner: false,
+      name: '',
       ip: this.clientIp(socket),
       admitted: false,
       hidden: false,
@@ -434,7 +439,7 @@ export class LiveService {
 
   // ------------------------------------------------------------------ rooms
 
-  private async joinRoom(peer: Peer, d: { slug?: unknown; key?: unknown; takeover?: unknown }) {
+  private async joinRoom(peer: Peer, d: { slug?: unknown; key?: unknown; takeover?: unknown; nickname?: unknown }) {
     if (typeof d.slug !== 'string') throw new ClientError('Room not found');
     const room = getRoomBySlug(d.slug);
     const p = peer.principal;
@@ -514,11 +519,15 @@ export class LiveService {
     peer.roomId = room.id;
     peer.isOwner = owner;
     peer.admitted = false;
+    const account = p?.role === 'user' ? getUser(p.userId!)?.name : p?.role === 'admin' ? 'Admin' : p?.role === 'guest' ? 'Guest' : undefined;
+    peer.name = account ?? (cleanNickname(d.nickname) || randomNickname());
     this.emitViewerCount(rt);
 
     return {
       room: { slug: room.slug, name: room.name, visibility: room.visibility, ownerName: ownerUser?.name ?? 'Admin', autoName: !!ownerUser && room.name === autoRoomName(ownerUser.name) },
       role: owner ? 'owner' : 'viewer',
+      name: peer.name,
+      signedIn: !!account,
       live: this.isLive(rt),
       rtpCapabilities: rt.router.rtpCapabilities,
       limits: owner ? (ownerUser?.limits ?? null) : undefined,
@@ -617,6 +626,18 @@ export class LiveService {
 
   private emitViewerCount(rt: RoomRuntime): void {
     this.io.to(`o:${rt.room.id}`).emit('viewerCount', rt.viewerIds.size);
+    // The names go out together, at most a few times a second however many people come and go.
+    if (rt.listTimer) return;
+    rt.listTimer = setTimeout(() => {
+      rt.listTimer = undefined;
+      const names: string[] = [];
+      for (const id of rt.viewerIds) {
+        const n = this.peers.get(id)?.name;
+        if (n) names.push(n);
+      }
+      this.io.to([`v:${rt.room.id}`, `o:${rt.room.id}`]).emit('viewers', { count: rt.viewerIds.size, names: names.slice(0, 200) });
+    }, 400);
+    rt.listTimer.unref();
   }
 
   private checkCanStart(rt: RoomRuntime, limits: Limits | null, userId: number | null): void {

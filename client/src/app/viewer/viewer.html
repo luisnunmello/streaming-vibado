@@ -1,6 +1,21 @@
 <div class="stage" #stage (mousemove)="poke()" (touchstart)="poke()" [class.idle]="!controlsVisible() && v.live()">
   <video #video autoplay playsinline muted (dblclick)="toggleFullscreen()"></video>
 
+  @if (askName()) {
+    <div class="modal-back">
+      <form class="modal" (submit)="$event.preventDefault(); submitName(!nickInput().trim())">
+        <h2>{{ 'Choose a nickname' | t }}</h2>
+        <p>{{ 'Other people watching can see it. You can also stay anonymous and get a random one.' | t }}</p>
+        <input type="text" maxlength="24" autofocus [value]="nickInput()" (input)="nickInput.set($any($event.target).value)"
+               [attr.placeholder]="'Nickname' | t" [attr.aria-label]="'Nickname' | t" />
+        <div class="actions">
+          <button type="button" class="alt" (click)="submitName(true)">{{ 'Stay anonymous' | t }}</button>
+          <button type="submit" class="go" [disabled]="!nickInput().trim()">{{ 'Watch' | t }}</button>
+        </div>
+      </form>
+    </div>
+  }
+
   <div class="top">
     <a routerLink="/dashboard/rooms" class="back" [attr.aria-label]="'Back to rooms' | t">{{ '← Rooms' | t }}</a>
     @if (v.roomName(); as name) {
@@ -85,6 +100,25 @@
       <span class="live"><i></i>{{ 'LIVE' | t }}</span>
     }
     <span class="spacer"></span>
+    <div class="people">
+      @if (showViewers()) {
+        <div class="list" role="dialog" [attr.aria-label]="'Viewers' | t">
+          <h2>{{ 'Watching now' | t }}</h2>
+          <ul>
+            @for (n of v.viewers().names; track $index) {
+              <li [class.me]="n === v.myName()">{{ n }}@if (n === v.myName()) { <small> · {{ 'you' | t }}</small> }</li>
+            }
+          </ul>
+          @if (v.viewers().count > v.viewers().names.length) {
+            <p class="more">{{ '+{n} more' | t: { n: v.viewers().count - v.viewers().names.length } }}</p>
+          }
+        </div>
+      }
+      <button type="button" class="text" [class.on]="showViewers()" (click)="showViewers.set(!showViewers())" [attr.aria-label]="'Viewers' | t">
+        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M12 4.5C7 4.5 2.7 7.6 1 12c1.7 4.4 6 7.5 11 7.5s9.3-3.1 11-7.5c-1.7-4.4-6-7.5-11-7.5zM12 17a5 5 0 1 1 0-10 5 5 0 0 1 0 10zm0-8a3 3 0 1 0 0 6 3 3 0 0 0 0-6z"/></svg>
+        {{ v.viewers().count }}
+      </button>
+    </div>
     @if (v.layers() > 1) {
       <label class="quality">
         <span>{{ 'Quality' | t }}</span>

@@ -38,8 +38,14 @@ export class ViewerService {
   /** Counts tracks added to the stream, so the page can make sure the element plays them. */
   readonly trackCount = signal(0);
 
+  /** Everyone watching (names are nicknames for anonymous viewers). */
+  readonly viewers = signal<{ count: number; names: string[] }>({ count: 0, names: [] });
+  /** The name this viewer has in the list, as the server settled it. */
+  readonly myName = signal<string | null>(null);
+
   private slug = '';
   private key: string | undefined;
+  private nickname: string | undefined;
   private device?: Device;
   private transport?: types.Transport;
   private consumers = new Map<string, types.Consumer>();
@@ -66,10 +72,13 @@ export class ViewerService {
     }
   };
 
-  start(slug: string, key?: string): void {
+  /** `nickname` is used by anonymous viewers; empty means a random one. */
+  start(slug: string, key?: string, nickname?: string): void {
     this.stop();
     this.slug = slug;
     this.key = key;
+    this.nickname = nickname;
+    this.viewers.set({ count: 0, names: [] });
     this.blocked = false;
     this.problem.set(null);
     this.error.set(null);
@@ -83,6 +92,7 @@ export class ViewerService {
         this.connecting.set(true);
       }),
       this.sig.on<{ live: boolean }>('streamState', (s) => this.live.set(s.live)),
+      this.sig.on<{ count: number; names: string[] }>('viewers', (v) => this.viewers.set(v)),
       this.sig.on<{ producerId: string }>('newProducer', ({ producerId }) => void this.consume(producerId, this.generation)),
       this.sig.on<{ producerId: string }>('producerClosed', ({ producerId }) => this.removeByProducer(producerId)),
       this.sig.on<{ reason: string }>('kicked', ({ reason }) => {
@@ -113,7 +123,7 @@ export class ViewerService {
 
   /** Tries again after "kicked" or a connection problem. */
   retry(): void {
-    if (this.slug) this.start(this.slug, this.key);
+    if (this.slug) this.start(this.slug, this.key, this.nickname);
   }
 
   setQuality(q: Quality): void {
@@ -150,9 +160,11 @@ export class ViewerService {
       const joined = await this.sig.request<{
         room: { name: string; ownerName: string; autoName?: boolean };
         live: boolean;
+        name: string;
         rtpCapabilities: types.RtpCapabilities;
-      }>('joinRoom', { slug: this.slug, key: this.key });
+      }>('joinRoom', { slug: this.slug, key: this.key, nickname: this.nickname });
       if (gen !== this.generation) return;
+      this.myName.set(joined.name);
       this.roomName.set(joined.room.name);
       this.ownerName.set(joined.room.ownerName);
       this.autoName.set(!!joined.room.autoName);
