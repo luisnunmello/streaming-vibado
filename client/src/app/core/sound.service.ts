@@ -1,4 +1,5 @@
 import { Injectable, signal } from '@angular/core';
+import { toast } from './toast';
 
 export type SoundEvent = 'streamStart' | 'streamStop' | 'viewerJoin' | 'viewerLeave';
 
@@ -8,6 +9,14 @@ export const SOUND_EVENTS: { key: SoundEvent; label: string; hint: string }[] = 
   { key: 'viewerJoin', label: 'Someone joins your stream', hint: 'Plays when the viewer count goes up.' },
   { key: 'viewerLeave', label: 'Someone leaves your stream', hint: 'Plays when the viewer count goes down.' },
 ];
+
+/** What the toast says when an event plays its sound. */
+const SOUND_TOASTS: Record<SoundEvent, string> = {
+  streamStart: 'Your stream is live',
+  streamStop: 'Your stream stopped',
+  viewerJoin: 'Someone joined your stream',
+  viewerLeave: 'Someone left your stream',
+};
 
 interface Stored {
   muted: boolean;
@@ -139,6 +148,7 @@ export class SoundService {
   play(event: SoundEvent): void {
     if (this.muted() || !this.enabled()[event]) return;
     this.preview(event);
+    toast(SOUND_TOASTS[event]); // so the sound always comes with its reason on screen
   }
 
   /** Plays regardless of the mute switch (the "Test" buttons); still respects the volume. */
