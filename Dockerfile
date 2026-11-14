@@ -13,12 +13,12 @@ RUN npx ng build
 FROM node:22-bookworm-slim AS server
 WORKDIR /build/server
 COPY server/package.json server/package-lock.json ./
-# The install is split in two on purpose. mediasoup's own install script downloads its worker binary from
-# GitHub with no timeout, so on a slow or stalled connection `npm ci` hangs forever (and, never finishing,
-# is never cached). Here the packages install first, then the download runs alone with a hard timeout
-# and retries, and is cached as its own layer.
+# The install is split on purpose. mediasoup's own install script downloads its worker binary from GitHub with
+# no timeout, so on a bad connection `npm ci` hangs forever (and, never finishing, is never cached). Here the
+# packages install first; then our script fetches the worker with a timeout, retries and a log line per step.
 RUN --mount=type=cache,target=/root/.npm npm ci --ignore-scripts
-RUN cd node_modules/mediasoup  && for i in 1 2 3 4 5; do timeout 120 node npm-scripts.mjs postinstall && break; echo "mediasoup worker download failed (attempt $i), retrying"; sleep 5; done  && test -x worker/out/Release/mediasoup-worker
+COPY scripts/fetch-mediasoup-worker.mjs /tmp/fetch-mediasoup-worker.mjs
+RUN cd node_modules/mediasoup && node /tmp/fetch-mediasoup-worker.mjs && test -x worker/out/Release/mediasoup-worker
 COPY server/ ./
 RUN npm run build && npm prune --omit=dev
 
