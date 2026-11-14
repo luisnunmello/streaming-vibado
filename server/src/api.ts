@@ -41,6 +41,7 @@ import { getGlobals, updateGlobals } from './globals.js';
 import { createPreset, deletePreset, listPresets, updatePreset } from './presets.js';
 import type { LiveService } from './live.js';
 import { ADMIN_MAX_INVITE_MINUTES, activeInvite, createInvite, getInvite, listInvites, peekInvite, redeemInvite, revokeInvite, statusOf as inviteStatus, type Invite } from './invites.js';
+import { countOpenBugs, createBug, deleteBug, getShot, listBugs, removeShot, updateBug } from './bugs.js';
 import { notifyAdmin } from './notify.js';
 import { checkNewPassword } from './password.js';
 import { autoRoomName, countRooms, createRoom, deleteRoom, getRoomById, getRoomBySlug, listPublicRooms, listRooms, updateRoom, type Room } from './rooms.js';
@@ -292,7 +293,7 @@ export function buildApi(live: LiveService, budget: BudgetManager): Router {
     wrap((_req, res) => {
       const p = principalOf(res);
       if (p.role === 'admin') {
-        res.json({ role: 'admin', name: 'admin', limits: null, pendingAppeals: countPendingAppeals() });
+        res.json({ role: 'admin', name: 'admin', limits: null, pendingAppeals: countPendingAppeals(), openBugs: countOpenBugs() });
         return;
       }
       if (p.role === 'guest') {
@@ -805,6 +806,66 @@ ${String(req.body?.text ?? '').trim().slice(0, 600)}`);
     requireAdmin,
     wrap((_req, res) => {
       res.json(budget.view());
+    }),
+  );
+
+  // ---------------------------------------------------------------- bug reports
+
+  // Anyone may report a bug, signed in or not (a restricted user too). Per-IP throttling keeps spam cheap.
+  api.post(
+    '/bugs',
+    wrap((req, res) => {
+      const done = throttle(req, 'bug');
+      done(false); // every report counts as an attempt: five in a row lock the sender out for a minute
+      const p = getSession(bearer(req));
+      const reporter = p?.role === 'user' ? (getUser(p.userId!)?.name ?? 'User') : p?.role === 'admin' ? 'Admin' : p?.role === 'guest' ? 'Guest' : 'Anonymous';
+      const bug = createBug({ ...req.body, reporter, page: req.body?.page, userAgent: req.headers['user-agent'] });
+      void notifyAdmin(`New bug report #${bug.id} from ${reporter}: ${bug.title}`);
+      res.status(201).json({ ok: true, id: bug.id });
+    }),
+  );
+
+  api.get(
+    '/admin/bugs',
+    requireAdmin,
+    wrap((_req, res) => {
+      res.json({ bugs: listBugs() });
+    }),
+  );
+
+  api.get(
+    '/admin/bugs/:id/screenshot',
+    requireAdmin,
+    wrap((req, res) => {
+      const shot = getShot(idParam(req));
+      if (!shot) throw new HttpError(404, 'No screenshot');
+      res.set({ 'content-type': shot.mime, 'cache-control': 'private, max-age=3600', 'x-content-type-options': 'nosniff' });
+      res.send(Buffer.from(shot.data));
+    }),
+  );
+
+  api.patch(
+    '/admin/bugs/:id',
+    requireAdmin,
+    wrap((req, res) => {
+      res.json({ bug: updateBug(idParam(req), req.body ?? {}) });
+    }),
+  );
+
+  api.delete(
+    '/admin/bugs/:id/screenshot',
+    requireAdmin,
+    wrap((req, res) => {
+      res.json({ bug: removeShot(idParam(req)) });
+    }),
+  );
+
+  api.delete(
+    '/admin/bugs/:id',
+    requireAdmin,
+    wrap((req, res) => {
+      deleteBug(idParam(req));
+      res.json({ ok: true });
     }),
   );
 

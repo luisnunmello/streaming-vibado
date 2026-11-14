@@ -28,7 +28,10 @@ purgePublicRooms();
 const app = express();
 if (config.trustProxy) app.set('trust proxy', /^\d+$/.test(config.trustProxy) ? Number(config.trustProxy) : config.trustProxy);
 app.disable('x-powered-by');
-app.use(express.json({ limit: '16kb' }));
+const smallJson = express.json({ limit: '16kb' });
+// Bug reports may carry a (shrunk) screenshot as base64, so that one route reads a bigger body.
+const bugJson = express.json({ limit: '600kb' });
+app.use((req, res, next) => (req.method === 'POST' && req.path === '/api/bugs' ? bugJson : smallJson)(req, res, next));
 
 const server =
   config.tls.key && config.tls.cert

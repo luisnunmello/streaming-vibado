@@ -169,6 +169,32 @@ if (version < 7) {
   `);
 }
 
+if (version < 8) {
+  // Bug reports from visitors; the screenshot (shrunk and size-capped) lives apart so listing stays light.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS bug_reports (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      title       TEXT NOT NULL,
+      description TEXT NOT NULL,
+      reporter    TEXT NOT NULL DEFAULT '',
+      page        TEXT NOT NULL DEFAULT '',
+      user_agent  TEXT NOT NULL DEFAULT '',
+      status      TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','solved')),
+      admin_note  TEXT NOT NULL DEFAULT '',
+      has_shot    INTEGER NOT NULL DEFAULT 0,
+      created_at  INTEGER NOT NULL,
+      updated_at  INTEGER NOT NULL,
+      solved_at   INTEGER
+    );
+    CREATE TABLE IF NOT EXISTS bug_shots (
+      bug_id INTEGER PRIMARY KEY REFERENCES bug_reports(id) ON DELETE CASCADE,
+      mime   TEXT NOT NULL,
+      data   BLOB NOT NULL
+    );
+    PRAGMA user_version = 8;
+  `);
+}
+
 export function all<T>(sql: string, ...params: SQLInputValue[]): T[] {
   return db.prepare(sql).all(...params) as T[];
 }
