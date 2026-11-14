@@ -85,6 +85,9 @@ export class StreamerService {
   private lastBytes = 0;
   private lastStatsAt = 0;
   private unsubs: Array<() => void> = [];
+  /** The connection dropped while streaming and the stream is being restored. */
+  private reconnecting = false;
+  private resuming = false;
 
   constructor() {
     // When the limits change (live, from the admin), pull the current settings inside them. If that changes
@@ -226,11 +229,21 @@ export class StreamerService {
         }
         this.flash(message);
       }),
-      this.sig.on('disconnect', () => {
-        if (this.state() !== 'idle') {
+      this.sig.on<string>('disconnect', (reason) => {
+        if (this.state() === 'idle') return;
+        // The server hung up on purpose (not a lost connection): nothing to come back to.
+        if (reason === 'io server disconnect') {
           this.error.set('Lost connection to the server. The stream was stopped.');
           void this.stop(false);
+          return;
         }
+        // Keep the capture running; the socket reconnects by itself and the stream is published again.
+        this.dropPublishing();
+        this.reconnecting = true;
+        this.notice.set('Lost connection to the server. Reconnecting…');
+      }),
+      this.sig.on('connect', () => {
+        if (this.reconnecting) void this.resume(slug);
       }),
     );
     await new Promise<void>((resolve, reject) => {
@@ -251,6 +264,48 @@ export class StreamerService {
     this.settings.set(clampSettings(loadSettings({ adaptive: !!res.limits, codec: res.limits ? 'vp8' : 'h264' }), res.limits ?? null));
     this.settingsReady = true;
     this.rtpCapabilities = res.rtpCapabilities;
+  }
+
+  /** Closes the send side locally (the server is gone or unreachable) while the screen capture keeps running. */
+  private dropPublishing(): void {
+    this.videoProducer?.close();
+    this.audioProducer?.close();
+    this.transport?.close();
+    this.videoProducer = this.audioProducer = this.transport = undefined;
+    this.stats.set(null);
+  }
+
+  /** After a lost connection: join the room again and publish the same capture, retrying until it works. */
+  private async resume(slug: string): Promise<void> {
+    if (this.resuming) return;
+    this.resuming = true;
+    try {
+      while (this.reconnecting && this.state() !== 'idle' && this.sig.connected()) {
+        try {
+          const res = await this.sig.request<{ role: string; room: RoomInfo; limits: Limits | null; rtpCapabilities: types.RtpCapabilities }>('joinRoom', { slug, takeover: true });
+          if (res.role !== 'owner') throw new Error('This is not your room');
+          this.room.set(res.room);
+          this.limits.set(res.limits ?? null);
+          this.rtpCapabilities = res.rtpCapabilities;
+          await this.publish(this.current!);
+          this.reconnecting = false;
+          this.notice.set('Back online. The stream was restored.');
+          setTimeout(() => this.notice() === 'Back online. The stream was restored.' && this.notice.set(null), 6000);
+          return;
+        } catch (e: any) {
+          if (/not found|not your room/i.test(e?.message ?? '')) {
+            this.reconnecting = false;
+            this.error.set('The room is gone, so the stream was stopped.');
+            await this.stop(false);
+            return;
+          }
+          this.dropPublishing();
+          await new Promise((r) => setTimeout(r, 3000));
+        }
+      }
+    } finally {
+      this.resuming = false;
+    }
   }
 
   /** A message that goes away by itself. */
@@ -301,6 +356,7 @@ export class StreamerService {
 
   async stop(notifyServer = true): Promise<void> {
     const wasLive = this.state() === 'live';
+    this.reconnecting = false;
     clearInterval(this.statsTimer);
     this.statsTimer = undefined;
     const producerIds = [this.videoProducer?.id, this.audioProducer?.id].filter((x): x is string => !!x);
@@ -502,7 +558,7 @@ export class StreamerService {
         .then(({ id }) => ok({ id }), fail);
     });
     transport.on('connectionstatechange', (state) => {
-      if (state === 'failed' && this.state() !== 'idle') {
+      if (state === 'failed' && this.state() !== 'idle' && !this.reconnecting && transport === this.transport) {
         this.error.set('The connection to the server failed (check that the WebRTC port is reachable).');
         void this.stop();
       }

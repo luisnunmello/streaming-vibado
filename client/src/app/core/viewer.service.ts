@@ -57,6 +57,8 @@ export class ViewerService {
   private hideTimer?: ReturnType<typeof setTimeout>;
   private generation = 0;
   private blocked = false;
+  /** When the connection to the server was lost (the room may need a moment to come back after a restart). */
+  private lostAt: number | null = null;
   private pausedSent = false;
   /** Producers being consumed or already consumed (a producer can be announced and listed at once). */
   private consuming = new Set<string>();
@@ -82,6 +84,7 @@ export class ViewerService {
     this.nickname = nickname;
     this.viewers.set({ count: 0, names: [] });
     this.blocked = false;
+    this.lostAt = null;
     this.problem.set(null);
     this.error.set(null);
     this.roomName.set(null);
@@ -90,6 +93,7 @@ export class ViewerService {
     this.unsubs.push(
       this.sig.on('connect', () => void this.setup()),
       this.sig.on('disconnect', () => {
+        this.lostAt ??= Date.now();
         this.teardown();
         this.connecting.set(true);
       }),
@@ -167,6 +171,7 @@ export class ViewerService {
       }>('joinRoom', { slug: this.slug, key: this.key, nickname: this.nickname, token: this.api.token() ?? undefined });
       if (gen !== this.generation) return;
       this.myName.set(joined.name);
+      this.lostAt = null;
       this.roomName.set(joined.room.name);
       this.ownerName.set(joined.room.ownerName);
       this.autoName.set(!!joined.room.autoName);
@@ -200,7 +205,12 @@ export class ViewerService {
       const message: string = e?.message ?? 'Could not connect';
       this.connecting.set(false);
       this.error.set(message);
-      if (/not found/i.test(message)) {
+      if (/not found/i.test(message) && this.lostAt && Date.now() - this.lostAt < 5 * 60_000) {
+        // The server restarted and the room is not back yet: keep waiting for it.
+        this.connecting.set(true);
+        this.error.set(null);
+        this.scheduleRetry(3000);
+      } else if (/not found/i.test(message)) {
         this.problem.set('notfound');
         this.blocked = true; // pointless to retry
       } else if (/full|too many|capacity/i.test(message)) {

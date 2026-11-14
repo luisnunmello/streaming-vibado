@@ -8,7 +8,7 @@ import { getSession, onRevoke, type Principal } from './auth.js';
 import { getGlobals } from './globals.js';
 import type { Limits } from './limits.js';
 import { activeInvite } from './invites.js';
-import { autoRoomName, deleteRoom, getRoomById, getRoomBySlug, type Room } from './rooms.js';
+import { autoRoomName, deleteRoom, getRoomById, getRoomBySlug, listRooms, type Room } from './rooms.js';
 import { cleanNickname, randomNickname } from './names.js';
 import type { Sfu } from './sfu.js';
 
@@ -126,6 +126,14 @@ export class LiveService {
       peer.socket.emit('kicked', { reason });
       this.leaveRoom(peer);
     }
+  }
+
+  /**
+   * After a restart nobody is online yet. Public rooms are kept for a while so streamers and viewers that
+   * reconnect by themselves find them again; the ones whose owner never comes back are removed.
+   */
+  holdPublicRooms(graceMs: number): void {
+    for (const r of listRooms()) if (r.visibility === 'public' && r.slug !== 'main') this.scheduleOwnerGone(r.id, graceMs);
   }
 
   /** Ends the room's stream and removes its viewers (room deleted or made private). */
@@ -594,14 +602,14 @@ export class LiveService {
    * Public rooms exist only while their owner is online. A short grace period lets a page reload or a
    * reconnect keep the room; the permanent main room is never removed.
    */
-  private scheduleOwnerGone(roomId: string): void {
+  private scheduleOwnerGone(roomId: string, graceMs = OWNER_GRACE_MS): void {
     setTimeout(() => {
       const room = getRoomById(roomId);
       if (!room || room.visibility !== 'public' || room.slug === 'main') return;
       if (this.runtimes.get(roomId)?.ownerSocketId) return; // the owner came back
       this.closeRoom(roomId, 'The owner went offline, so this public room was removed');
       deleteRoom(roomId);
-    }, OWNER_GRACE_MS).unref();
+    }, graceMs).unref();
   }
 
   private onStreamStopped(rt: RoomRuntime): void {

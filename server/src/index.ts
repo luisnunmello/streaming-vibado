@@ -8,7 +8,7 @@ import { buildApi } from './api.js';
 import { BudgetManager } from './budget.js';
 import { config } from './config.js';
 import { LiveService } from './live.js';
-import { ensureMainRoom, purgePublicRooms } from './rooms.js';
+import { ensureMainRoom } from './rooms.js';
 import { initSettings } from './settings.js';
 import { revokeGuestSessions } from './auth.js';
 import { dueInvites, markEnded } from './invites.js';
@@ -23,7 +23,6 @@ if (generated) {
   console.log('================================================================\n');
 }
 ensureMainRoom();
-purgePublicRooms();
 
 const app = express();
 if (config.trustProxy) app.set('trust proxy', /^\d+$/.test(config.trustProxy) ? Number(config.trustProxy) : config.trustProxy);
@@ -44,6 +43,8 @@ const live = new LiveService(io, sfu);
 const budget = new BudgetManager(live);
 live.budget = budget;
 live.attach();
+// Rooms that were public before a restart stay for two minutes, so a streamer's browser can reconnect to its own.
+live.holdPublicRooms(120_000);
 budget.start();
 // Temporary invites end by themselves: the guest is disconnected and their stream stops.
 setInterval(() => {
