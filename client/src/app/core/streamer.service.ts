@@ -88,6 +88,8 @@ export class StreamerService {
   /** The connection dropped while streaming and the stream is being restored. */
   private reconnecting = false;
   private resuming = false;
+  /** The connection was lost, so this window is not yet the room's owner on the new one. */
+  private needsRejoin = false;
 
   constructor() {
     // When the limits change (live, from the admin), pull the current settings inside them. If that changes
@@ -230,20 +232,24 @@ export class StreamerService {
         this.flash(message);
       }),
       this.sig.on<string>('disconnect', (reason) => {
-        if (this.state() === 'idle') return;
         // The server hung up on purpose (not a lost connection): nothing to come back to.
         if (reason === 'io server disconnect') {
+          if (this.state() === 'idle') return;
           this.error.set('Lost connection to the server. The stream was stopped.');
           void this.stop(false);
           return;
         }
+        // A new connection is not the room's owner yet, even while idle: it has to join the room again,
+        // or starting a stream afterwards fails with "Not authorized".
+        this.needsRejoin = true;
+        if (this.state() === 'idle') return;
         // Keep the capture running; the socket reconnects by itself and the stream is published again.
         this.dropPublishing();
         this.reconnecting = true;
         this.notice.set('Lost connection to the server. Reconnecting…');
       }),
       this.sig.on('connect', () => {
-        if (this.reconnecting) void this.resume(slug);
+        if (this.needsRejoin) void this.resume(slug);
       }),
     );
     await new Promise<void>((resolve, reject) => {
@@ -275,26 +281,32 @@ export class StreamerService {
     this.stats.set(null);
   }
 
-  /** After a lost connection: join the room again and publish the same capture, retrying until it works. */
+  /** After a lost connection: join the room again (and publish the same capture if it was live), retrying until it works. */
   private async resume(slug: string): Promise<void> {
     if (this.resuming) return;
     this.resuming = true;
     try {
-      while (this.reconnecting && this.state() !== 'idle' && this.sig.connected()) {
+      while (this.needsRejoin && this.sig.connected()) {
         try {
           const res = await this.sig.request<{ role: string; room: RoomInfo; limits: Limits | null; rtpCapabilities: types.RtpCapabilities }>('joinRoom', { slug, takeover: true });
           if (res.role !== 'owner') throw new Error('This is not your room');
           this.room.set(res.room);
           this.limits.set(res.limits ?? null);
           this.rtpCapabilities = res.rtpCapabilities;
-          await this.publish(this.current!);
+          if (this.reconnecting && this.state() !== 'idle') {
+            await this.publish(this.current!);
+            this.notice.set('Back online. The stream was restored.');
+            setTimeout(() => this.notice() === 'Back online. The stream was restored.' && this.notice.set(null), 6000);
+          } else if (this.state() === 'idle') {
+            this.notice.set(null);
+          }
           this.reconnecting = false;
-          this.notice.set('Back online. The stream was restored.');
-          setTimeout(() => this.notice() === 'Back online. The stream was restored.' && this.notice.set(null), 6000);
+          this.needsRejoin = false;
           return;
         } catch (e: any) {
           if (/not found|not your room/i.test(e?.message ?? '')) {
             this.reconnecting = false;
+            this.needsRejoin = false;
             this.error.set('The room is gone, so the stream was stopped.');
             await this.stop(false);
             return;
@@ -316,6 +328,7 @@ export class StreamerService {
 
   async leave(): Promise<void> {
     await this.stop();
+    this.needsRejoin = false;
     this.unsubs.forEach((u) => u());
     this.unsubs = [];
     this.sig.close();
@@ -338,6 +351,12 @@ export class StreamerService {
     this.notice.set(null);
     if (!navigator.mediaDevices?.getDisplayMedia) {
       this.error.set('Screen capture is not available. Use HTTPS (or localhost) and a desktop Chromium-based browser.');
+      return;
+    }
+    // The server was restarted (or the connection dropped) and the room is still being joined again.
+    for (let waited = 0; this.needsRejoin && waited < 15_000; waited += 250) await new Promise((r) => setTimeout(r, 250));
+    if (this.needsRejoin) {
+      this.error.set('Reconnecting to the server. Try again in a moment.');
       return;
     }
     this.state.set('starting');
