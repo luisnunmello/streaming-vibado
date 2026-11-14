@@ -4,7 +4,7 @@
 FROM node:22-bookworm-slim AS client
 WORKDIR /build/client
 COPY client/package.json client/package-lock.json ./
-RUN npm ci
+RUN --mount=type=cache,target=/root/.npm npm ci
 COPY client/ ./
 RUN npx ng build
 
@@ -13,7 +13,7 @@ RUN npx ng build
 FROM node:22-bookworm-slim AS server
 WORKDIR /build/server
 COPY server/package.json server/package-lock.json ./
-RUN npm ci
+RUN --mount=type=cache,target=/root/.npm npm ci
 COPY server/ ./
 RUN npm run build && npm prune --omit=dev
 

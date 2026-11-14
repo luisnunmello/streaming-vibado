@@ -1,4 +1,2 @@
-import pkg from '../../../package.json';
-
-/** The app version, from client/package.json (kept equal to the server's by scripts/bump-version.mjs). */
-export const APP_VERSION: string = pkg.version;
+/** The app version. Kept equal to the server's by scripts/bump-version.mjs (not in package.json, so a bump does not invalidate Docker's cached `npm ci`). */
+export const APP_VERSION = '1.1.3';
