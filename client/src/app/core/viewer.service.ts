@@ -1,5 +1,6 @@
-import { Injectable, signal } from '@angular/core';
+import { Injectable, inject, signal } from '@angular/core';
 import { Device, type types } from 'mediasoup-client';
+import { ApiService } from './api.service';
 import { SignalingService } from './signaling.service';
 
 export interface ViewerStats {
@@ -20,6 +21,7 @@ export type ViewerProblem = 'notfound' | 'kicked' | 'busy' | 'other';
 export class ViewerService {
   /** Its own connection: a streamer watching their own room in the same tab keeps their stream connection. */
   private readonly sig = new SignalingService();
+  private readonly api = inject(ApiService);
 
   readonly live = signal(false);
   readonly connecting = signal(true);
@@ -162,7 +164,7 @@ export class ViewerService {
         live: boolean;
         name: string;
         rtpCapabilities: types.RtpCapabilities;
-      }>('joinRoom', { slug: this.slug, key: this.key, nickname: this.nickname });
+      }>('joinRoom', { slug: this.slug, key: this.key, nickname: this.nickname, token: this.api.token() ?? undefined });
       if (gen !== this.generation) return;
       this.myName.set(joined.name);
       this.roomName.set(joined.room.name);

@@ -439,7 +439,7 @@ export class LiveService {
 
   // ------------------------------------------------------------------ rooms
 
-  private async joinRoom(peer: Peer, d: { slug?: unknown; key?: unknown; takeover?: unknown; nickname?: unknown }) {
+  private async joinRoom(peer: Peer, d: { slug?: unknown; key?: unknown; takeover?: unknown; nickname?: unknown; token?: unknown }) {
     if (typeof d.slug !== 'string') throw new ClientError('Room not found');
     const room = getRoomBySlug(d.slug);
     const p = peer.principal;
@@ -519,7 +519,9 @@ export class LiveService {
     peer.roomId = room.id;
     peer.isOwner = owner;
     peer.admitted = false;
-    const account = p?.role === 'user' ? getUser(p.userId!)?.name : p?.role === 'admin' ? 'Admin' : p?.role === 'guest' ? 'Guest' : undefined;
+    // The viewer page connects without logging in (so an owner can watch their own room), and sends its token only to be named.
+    const who = p ?? getSession(d.token);
+    const account = who?.role === 'user' ? getUser(who.userId!)?.name : who?.role === 'admin' ? 'Admin' : who?.role === 'guest' ? 'Guest' : undefined;
     peer.name = account ?? (cleanNickname(d.nickname) || randomNickname());
     this.emitViewerCount(rt);
 
