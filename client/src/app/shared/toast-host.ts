@@ -7,35 +7,81 @@ interface Item {
   leaving: boolean;
 }
 
-/** Corner messages ("Copied!", "Saved."). Fed by toast() in core/toast.ts. */
+/** Messages at the top middle of the screen ("Copied!", "Saved."). Fed by toast() in core/toast.ts. */
 @Component({
   selector: 'app-toast-host',
   template: `
     <div class="toast-stack" aria-live="polite">
       @for (t of items(); track t.id) {
-        <div class="toast-item" [class.leaving]="t.leaving">{{ t.text }}</div>
+        <div class="toast-item" [class.leaving]="t.leaving" role="status">
+          <span class="msg">{{ t.text }}</span>
+          <span class="timer" aria-hidden="true"><i></i></span>
+        </div>
       }
     </div>
   `,
   styles: `
     .toast-stack {
       position: fixed;
-      right: max(1rem, env(safe-area-inset-right));
-      bottom: max(1rem, env(safe-area-inset-bottom));
+      top: max(1rem, env(safe-area-inset-top));
+      left: 50%;
+      transform: translateX(-50%);
+      width: min(440px, calc(100vw - 2rem));
       z-index: 2000;
       display: grid;
-      gap: 0.5rem;
-      justify-items: end;
+      gap: 0.6rem;
       pointer-events: none;
     }
     .toast-item {
-      padding: 0.6rem 0.95rem;
-      border-radius: 10px;
-      border: 1px solid var(--line);
+      position: relative;
+      overflow: hidden;
+      padding: 0.95rem 1.2rem 1.2rem;
+      border-radius: 14px;
+      border: 1px solid var(--accent);
       background: var(--panel-2);
       color: var(--text);
-      font-size: 0.9rem;
-      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+      font-size: 1.05rem;
+      font-weight: 600;
+      text-align: center;
+      box-shadow: 0 0 0 3px rgba(124, 156, 255, 0.25), 0 14px 40px rgba(0, 0, 0, 0.6);
+      animation: toast-in 0.28s cubic-bezier(0.2, 1.2, 0.4, 1);
+      transition: opacity 0.25s, transform 0.25s;
+    }
+    .toast-item.leaving {
+      opacity: 0;
+      transform: translateY(-10px);
+    }
+    /* Drains from full to empty over the time the message stays. */
+    .timer {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      height: 5px;
+      background: rgba(255, 255, 255, 0.12);
+    }
+    .timer i {
+      display: block;
+      height: 100%;
+      background: var(--accent);
+      transform-origin: left;
+      animation: toast-drain 2.2s linear forwards;
+    }
+    @keyframes toast-in {
+      from {
+        opacity: 0;
+        transform: translateY(-18px) scale(0.92);
+      }
+    }
+    @keyframes toast-drain {
+      to {
+        transform: scaleX(0);
+      }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .toast-item {
+        animation: none;
+      }
     }
   `,
 })
