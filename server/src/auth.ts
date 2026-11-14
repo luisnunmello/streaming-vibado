@@ -29,14 +29,14 @@ export function onRevoke(cb: (tokens: string[]) => void): void {
   revokeListeners.push(cb);
 }
 
-/** `remember` keeps the session for 30 days and across server restarts (e.g. a redeploy). */
+/** `remember` keeps the session for 30 days instead of 12 hours. Sessions survive server restarts either way. */
 export function createSession(principal: Principal, remember = false, ttlMs?: number): string {
   const token = crypto.randomBytes(32).toString('base64url');
   const expires = Date.now() + (ttlMs ?? (remember ? REMEMBER_TTL_MS : SESSION_TTL_MS));
   sessions.set(token, { principal, expires });
-  if (remember) {
-    run('INSERT INTO sessions (token_hash, role, user_id, expires_at) VALUES (?, ?, ?, ?)', hashToken(token), principal.role, principal.userId ?? principal.inviteId ?? null, expires);
-  }
+  // Every session is kept in the database (only a hash of the token), so a server restart does not sign anyone out:
+  // open studios and viewer pages reconnect and are still recognised.
+  run('INSERT INTO sessions (token_hash, role, user_id, expires_at) VALUES (?, ?, ?, ?)', hashToken(token), principal.role, principal.userId ?? principal.inviteId ?? null, expires);
   return token;
 }
 

@@ -590,6 +590,8 @@ export class StreamerService {
     const maxBitrate = Math.round(s.bitrateMbps * 1_000_000);
     this.videoProducer = await transport.produce({
       track: video,
+      // Closing a producer must not stop the capture: after a reconnect the same track is published again.
+      stopTracks: false,
       codec,
       encodings: this.encodings(s),
       codecOptions: {
@@ -604,6 +606,7 @@ export class StreamerService {
     if (this.mixer) {
       this.audioProducer = await transport.produce({
         track: this.mixer.track,
+        stopTracks: false,
         codecOptions: { opusStereo: true, opusFec: true, opusDtx: false, opusMaxPlaybackRate: 48000, opusMaxAverageBitrate: 128000, opusPtime: 20 },
         encodings: [{ maxBitrate: 128_000, priority: 'high' }],
         appData: { source: 'audio' },
