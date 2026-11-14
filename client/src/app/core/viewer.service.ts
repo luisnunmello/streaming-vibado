@@ -180,8 +180,7 @@ export class ViewerService {
       this.problem.set(null);
       this.connecting.set(false);
 
-      const { producers } = await this.sig.request<{ producers: { id: string }[] }>('getProducers');
-      for (const p of producers) await this.consume(p.id, gen);
+      await this.syncProducers(gen);
     } catch (e: any) {
       if (gen !== this.generation) return;
       const message: string = e?.message ?? 'Could not connect';
@@ -198,6 +197,12 @@ export class ViewerService {
         this.scheduleRetry(4000);
       }
     }
+  }
+
+  /** Consumes every producer the room has that is not being consumed yet. */
+  private async syncProducers(gen: number): Promise<void> {
+    const { producers } = await this.sig.request<{ producers: { id: string }[] }>('getProducers');
+    for (const p of producers) await this.consume(p.id, gen);
   }
 
   private scheduleRetry(ms: number): void {
@@ -266,7 +271,15 @@ export class ViewerService {
   private async collectStats(): Promise<void> {
     const video = [...this.consumers.values()].find((c) => c.kind === 'video');
     if (!video) {
-      this.stalled = 0;
+      // Live and joined, but no video consumer (a consume failed or an announcement was missed): resync, then start over.
+      if (this.live() && this.transport && !this.blocked) {
+        this.stalled++;
+        if (this.stalled === 3 || this.stalled === 6) this.syncProducers(this.generation).catch(() => undefined);
+        if (this.stalled >= 10) {
+          this.stalled = 0;
+          this.scheduleRetry(0);
+        }
+      } else this.stalled = 0;
       return;
     }
     try {
@@ -275,9 +288,8 @@ export class ViewerService {
       report.forEach((r: any) => {
         if (r.type === 'inbound-rtp' && r.kind === 'video') inbound = r;
       });
-      if (!inbound) return;
-      // Black screen watchdog: connected but no frame decoded. Ask for a keyframe, then start over.
-      if (this.live() && !inbound.framesDecoded) {
+      // Black screen watchdog: connected but no frame decoded (or no RTP stats at all). Ask for a keyframe, then start over.
+      if (this.live() && !this.pausedSent && !inbound?.framesDecoded) {
         this.stalled++;
         if (this.stalled === 3 || this.stalled === 6) this.sig.request('requestKeyFrame', { consumerId: video.id }).catch(() => undefined);
         if (this.stalled >= 10) {
@@ -285,6 +297,7 @@ export class ViewerService {
           this.scheduleRetry(0);
         }
       } else this.stalled = 0;
+      if (!inbound) return;
       const now = performance.now();
       const dt = now - this.last.at;
       const bitrateKbps = this.last.at ? ((inbound.bytesReceived - this.last.bytes) * 8) / dt : 0;
