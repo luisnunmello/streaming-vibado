@@ -204,6 +204,14 @@ if (version < 9) {
   `);
 }
 
+if (version < 10) {
+  // Technical details sent with a report (browser, player state, recent player events), as JSON text.
+  db.exec(`
+    ALTER TABLE bug_reports ADD COLUMN diagnostics TEXT NOT NULL DEFAULT '';
+    PRAGMA user_version = 10;
+  `);
+}
+
 export function all<T>(sql: string, ...params: SQLInputValue[]): T[] {
   return db.prepare(sql).all(...params) as T[];
 }

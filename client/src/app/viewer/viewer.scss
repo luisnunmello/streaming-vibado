@@ -44,9 +44,13 @@
   }
 }
 
-.stage.idle .top {
+.stage.idle .top:not(:has(.modal-backdrop)) {
   opacity: 0;
   pointer-events: none;
+}
+/* the bug report dialog lives inside the top bar: keep it visible and above the rest of the page */
+.top:has(.modal-backdrop) {
+  z-index: 1000;
 }
 
 .stage {

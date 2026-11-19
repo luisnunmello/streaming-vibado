@@ -7,6 +7,8 @@ export interface BugReportView {
   userAgent: string;
   version: string;
   fixedIn: string;
+  /** JSON text with browser and player details ('' when none). */
+  diagnostics: string;
   status: 'open' | 'solved';
   adminNote: string;
   hasShot: boolean;

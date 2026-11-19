@@ -5,6 +5,7 @@ import { AuthService } from '../../core/auth.service';
 import { BugReportView } from '../../core/bug';
 import { DialogService } from '../../core/dialog.service';
 import { TPipe } from '../../core/i18n.service';
+import { copyText } from '../../core/util';
 import { APP_VERSION } from '../../core/version';
 
 type Filter = 'open' | 'solved' | 'all';
@@ -85,6 +86,13 @@ type Filter = 'open' | 'solved' | 'all';
                   <button type="button" class="btn small danger" (click)="dropShot(b)">{{ 'Delete screenshot' | t }}</button>
                 </div>
               }
+              @if (pretty(b); as d) {
+                <details class="diag">
+                  <summary>{{ 'Technical details' | t }}</summary>
+                  <pre>{{ d }}</pre>
+                  <button type="button" class="btn small" (click)="copy(d)">{{ 'Copy' | t }}</button>
+                </details>
+              }
               @if (b.userAgent) {
                 <p class="muted ua">{{ b.userAgent }}</p>
               }
@@ -157,6 +165,25 @@ type Filter = 'open' | 'solved' | 'all';
       border-radius: 6px;
       border: 1px solid var(--line);
     }
+    .diag {
+      margin: 0.6rem 0;
+    }
+    .diag summary {
+      cursor: pointer;
+      color: var(--muted);
+    }
+    .diag pre {
+      max-height: 360px;
+      overflow: auto;
+      margin: 0.5rem 0;
+      padding: 0.7rem;
+      border-radius: 8px;
+      background: var(--bg);
+      font-size: 0.75rem;
+      line-height: 1.4;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
     .ua {
       font-size: 0.75rem;
       overflow-wrap: anywhere;
@@ -199,6 +226,20 @@ export class Bugs implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.clearShot();
+  }
+
+  /** The report's technical details, indented for reading ('' when it has none). */
+  protected pretty(b: BugReportView): string {
+    if (!b.diagnostics) return '';
+    try {
+      return JSON.stringify(JSON.parse(b.diagnostics), null, 1);
+    } catch {
+      return b.diagnostics;
+    }
+  }
+
+  protected copy(text: string): void {
+    void copyText(text);
   }
 
   protected date(ms: number): string {

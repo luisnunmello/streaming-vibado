@@ -19,6 +19,8 @@ export interface BugReport {
   version: string;
   /** App version that fixed it (set by the admin). */
   fixedIn: string;
+  /** JSON text: browser and player details sent with the report ('' when none). */
+  diagnostics: string;
   status: BugStatus;
   adminNote: string;
   hasShot: boolean;
@@ -36,6 +38,7 @@ interface Row {
   user_agent: string;
   version: string;
   fixed_in: string;
+  diagnostics: string;
   status: BugStatus;
   admin_note: string;
   has_shot: number;
@@ -53,6 +56,7 @@ const toReport = (r: Row): BugReport => ({
   userAgent: r.user_agent,
   version: r.version,
   fixedIn: r.fixed_in,
+  diagnostics: r.diagnostics,
   status: r.status,
   adminNote: r.admin_note,
   hasShot: !!r.has_shot,
@@ -87,7 +91,15 @@ function parseShot(dataUrl: unknown): { mime: string; data: Buffer } {
 /** Versions look like 1.2.3 (anything else is ignored, so reports can't carry junk). */
 export const cleanVersion = (v: unknown): string => (typeof v === 'string' && /^\d{1,4}\.\d{1,4}\.\d{1,4}$/.test(v.trim()) ? v.trim() : '');
 
-export function createBug(input: { version?: unknown; title: unknown; description: unknown; screenshot?: unknown; reporter: string; page: unknown; userAgent: unknown }): BugReport {
+/** Diagnostics are a small JSON object from the page; anything else or anything big is dropped. */
+const MAX_DIAGNOSTICS = 16_000;
+function cleanDiagnostics(v: unknown): string {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return '';
+  const text = JSON.stringify(v);
+  return text.length <= MAX_DIAGNOSTICS ? text : JSON.stringify({ truncated: true, bytes: text.length });
+}
+
+export function createBug(input: { diagnostics?: unknown; version?: unknown; title: unknown; description: unknown; screenshot?: unknown; reporter: string; page: unknown; userAgent: unknown }): BugReport {
   const title = text(input.title, 'The title', 3, 100);
   const description = text(input.description, 'The description', 5, 2000);
   const shot = input.screenshot ? parseShot(input.screenshot) : null;
@@ -97,13 +109,14 @@ export function createBug(input: { version?: unknown; title: unknown; descriptio
   const now = Date.now();
   const id = tx(() => {
     const r = run(
-      'INSERT INTO bug_reports (title, description, reporter, page, user_agent, version, has_shot, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      'INSERT INTO bug_reports (title, description, reporter, page, user_agent, version, diagnostics, has_shot, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       title,
       description,
       input.reporter,
       page,
       userAgent,
       cleanVersion(input.version),
+      cleanDiagnostics(input.diagnostics),
       shot ? 1 : 0,
       now,
       now,

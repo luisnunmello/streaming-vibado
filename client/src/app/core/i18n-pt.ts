@@ -656,4 +656,7 @@ export const PT: Record<string, string> = {
   'No bug reports here.': 'Nenhum relato aqui.',
   'Delete this screenshot?': 'Excluir esta captura?',
   'Delete this bug report for good?': 'Excluir este relato definitivamente?',
+  'Technical details about the player (connection, video state, recent events) are attached to help find the problem.': 'Detalhes técnicos do player (conexão, estado do vídeo, eventos recentes) são enviados junto para ajudar a achar o problema.',
+  'Technical details': 'Detalhes técnicos',
+  'Copy': 'Copiar',
 };

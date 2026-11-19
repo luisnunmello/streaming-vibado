@@ -6,13 +6,14 @@ import { ApiService } from '../core/api.service';
 import { localControls, StreamerRemote } from '../core/stream-controls';
 import { StreamerService } from '../core/streamer.service';
 import { ViewerService, type Quality } from '../core/viewer.service';
+import { BugReport } from '../shared/bug-report';
 import { ControlBar } from '../shared/control-bar';
 
 const NICK_KEY = 'viewerNickname';
 
 @Component({
   selector: 'app-viewer',
-  imports: [RouterLink, ControlBar, TPipe],
+  imports: [RouterLink, BugReport, ControlBar, TPipe],
   templateUrl: './viewer.html',
   styleUrl: './viewer.scss',
   host: { '(document:fullscreenchange)': 'onFullscreenChange()' },
@@ -117,6 +118,7 @@ export class Viewer implements OnInit, OnDestroy {
     this.pingTimer = setInterval(() => this.mine() && this.remote.ping(), 3000);
     queueMicrotask(() => {
       const el = this.video().nativeElement;
+      this.v.registerVideo(el);
       el.srcObject = this.v.stream;
       el.play().catch(() => undefined);
     });
@@ -139,6 +141,7 @@ export class Viewer implements OnInit, OnDestroy {
     clearInterval(this.pingTimer);
     clearTimeout(this.hideTimer);
     this.sub?.unsubscribe();
+    this.v.registerVideo(null);
     this.v.stop();
   }
 

@@ -45,8 +45,14 @@ export class ViewerService {
   /** The name this viewer has in the list, as the server settled it. */
   readonly myName = signal<string | null>(null);
 
+  /** True from start() to stop(): the player page is open (bug reports then carry the player's state). */
+  readonly watching = signal(false);
+
   private slug = '';
   private key: string | undefined;
+  private video?: HTMLVideoElement;
+  private readonly events: { at: number; msg: string }[] = [];
+  private startedAt = 0;
   private nickname: string | undefined;
   private device?: Device;
   private transport?: types.Transport;
@@ -76,9 +82,24 @@ export class ViewerService {
     }
   };
 
+  /** The page hands over its <video> so bug reports can describe what the element is doing. */
+  registerVideo(el: HTMLVideoElement | null): void {
+    this.video = el ?? undefined;
+  }
+
+  /** Short log of what the player did lately (kept small; sent with bug reports). */
+  private note(msg: string): void {
+    this.events.push({ at: Date.now(), msg: msg.slice(0, 160) });
+    if (this.events.length > 40) this.events.shift();
+  }
+
   /** `nickname` is used by anonymous viewers; empty means a random one. */
   start(slug: string, key?: string, nickname?: string): void {
     this.stop();
+    this.watching.set(true);
+    this.startedAt = Date.now();
+    this.events.length = 0;
+    this.note(`start ${slug}`);
     this.slug = slug;
     this.key = key;
     this.nickname = nickname;
@@ -91,17 +112,28 @@ export class ViewerService {
     this.connecting.set(true);
     this.sig.open();
     this.unsubs.push(
-      this.sig.on('connect', () => void this.setup()),
-      this.sig.on('disconnect', () => {
+      this.sig.on('connect', () => {
+        this.note('socket connected');
+        void this.setup();
+      }),
+      this.sig.on<string>('disconnect', (reason) => {
+        this.note(`socket disconnected (${reason})`);
         this.lostAt ??= Date.now();
         this.teardown();
         this.connecting.set(true);
       }),
-      this.sig.on<{ live: boolean }>('streamState', (s) => this.live.set(s.live)),
+      this.sig.on<{ live: boolean }>('streamState', (s) => {
+        this.note(`stream live=${s.live}`);
+        this.live.set(s.live);
+      }),
       this.sig.on<{ count: number; names: string[] }>('viewers', (v) => this.viewers.set(v)),
-      this.sig.on<{ producerId: string }>('newProducer', ({ producerId }) => void this.consume(producerId, this.generation)),
+      this.sig.on<{ producerId: string }>('newProducer', ({ producerId }) => {
+        this.note('newProducer');
+        void this.consume(producerId, this.generation);
+      }),
       this.sig.on<{ producerId: string }>('producerClosed', ({ producerId }) => this.removeByProducer(producerId)),
       this.sig.on<{ reason: string }>('kicked', ({ reason }) => {
+        this.note(`kicked: ${reason}`);
         this.blocked = true;
         clearTimeout(this.retryTimer);
         this.teardown();
@@ -116,6 +148,7 @@ export class ViewerService {
   }
 
   stop(): void {
+    this.watching.set(false);
     clearInterval(this.statsTimer);
     clearTimeout(this.retryTimer);
     clearTimeout(this.hideTimer);
@@ -125,6 +158,117 @@ export class ViewerService {
     this.teardown();
     this.sig.close();
     this.live.set(false);
+  }
+
+  /**
+   * A snapshot of the player for bug reports: connection, tracks, the <video> element, receive statistics and the
+   * latest events. Everything here is read-only and small (a few KB). Network addresses are left out.
+   */
+  async diagnostics(): Promise<Record<string, unknown>> {
+    const now = Date.now();
+    const v = this.video;
+    const q = v?.getVideoPlaybackQuality?.();
+    const trackInfo = (t: MediaStreamTrack) => ({ kind: t.kind, readyState: t.readyState, muted: t.muted, enabled: t.enabled });
+    const withTimeout = <T>(p: Promise<T>): Promise<T | undefined> =>
+      Promise.race([p, new Promise<undefined>((r) => setTimeout(() => r(undefined), 2000))]).catch(() => undefined);
+
+    let inbound: Record<string, unknown> | undefined;
+    let net: Record<string, unknown> | undefined;
+    const video = [...this.consumers.values()].find((c) => c.kind === 'video');
+    const rep = video ? await withTimeout(video.getStats()) : undefined;
+    rep?.forEach((r: any) => {
+      if (r.type !== 'inbound-rtp' || r.kind !== 'video') return;
+      const keep = [
+        'framesReceived', 'framesDecoded', 'framesDropped', 'keyFramesDecoded', 'frameWidth', 'frameHeight', 'framesPerSecond',
+        'packetsReceived', 'packetsLost', 'bytesReceived', 'jitter', 'nackCount', 'pliCount', 'firCount', 'freezeCount',
+        'totalFreezesDuration', 'pauseCount', 'decoderImplementation', 'powerEfficientDecoder', 'jitterBufferDelay', 'jitterBufferEmittedCount',
+      ];
+      inbound = Object.fromEntries(keep.filter((k) => r[k] !== undefined).map((k) => [k, r[k]]));
+    });
+    const trep = this.transport ? await withTimeout(this.transport.getStats()) : undefined;
+    if (trep) {
+      const byId = new Map<string, any>();
+      trep.forEach((r: any) => byId.set(r.id, r));
+      const tr = [...byId.values()].find((r) => r.type === 'transport');
+      const pair = tr?.selectedCandidatePairId ? byId.get(tr.selectedCandidatePairId) : [...byId.values()].find((r) => r.type === 'candidate-pair' && r.nominated);
+      if (pair) {
+        net = {
+          pairState: pair.state,
+          rttMs: pair.currentRoundTripTime !== undefined ? Math.round(pair.currentRoundTripTime * 1000) : undefined,
+          availableIncomingKbps: pair.availableIncomingBitrate ? Math.round(pair.availableIncomingBitrate / 1000) : undefined,
+          localType: byId.get(pair.localCandidateId)?.candidateType,
+          remoteType: byId.get(pair.remoteCandidateId)?.candidateType,
+          protocol: byId.get(pair.localCandidateId)?.protocol,
+          dtls: tr?.dtlsState,
+        };
+      }
+    }
+
+    let gpu: string | null = null;
+    try {
+      const gl = document.createElement('canvas').getContext('webgl') as WebGLRenderingContext | null;
+      const ext = gl?.getExtension('WEBGL_debug_renderer_info');
+      if (gl && ext) gpu = String(gl.getParameter(ext.UNMASKED_RENDERER_WEBGL)).slice(0, 120);
+    } catch {
+      /* no WebGL */
+    }
+    let canDecode: string[] = [];
+    try {
+      canDecode = [...new Set((RTCRtpReceiver.getCapabilities('video')?.codecs ?? []).map((c) => c.mimeType.replace('video/', '')))];
+    } catch {
+      /* not supported */
+    }
+
+    return {
+      room: this.slug,
+      sessionSeconds: Math.round((now - this.startedAt) / 1000),
+      state: {
+        socketConnected: this.sig.connected(),
+        live: this.live(),
+        connecting: this.connecting(),
+        problem: this.problem(),
+        error: this.error(),
+        blocked: this.blocked,
+        lostSecondsAgo: this.lostAt ? Math.round((now - this.lostAt) / 1000) : null,
+        stalledSeconds: this.stalled,
+        tabHidden: document.hidden,
+        pausedSent: this.pausedSent,
+        quality: this.quality(),
+        layers: this.layers(),
+        viewers: this.viewers().count,
+        shownStats: this.stats(),
+      },
+      transport: this.transport ? { connectionState: this.transport.connectionState, closed: this.transport.closed } : null,
+      net,
+      consumers: [...this.consumers.values()].map((c) => ({
+        kind: c.kind,
+        paused: c.paused,
+        closed: c.closed,
+        codec: c.rtpParameters.codecs[0]?.mimeType,
+        track: trackInfo(c.track),
+      })),
+      streamTracks: this.stream.getTracks().map(trackInfo),
+      inboundVideo: inbound,
+      videoElement: v
+        ? {
+            readyState: v.readyState,
+            networkState: v.networkState,
+            paused: v.paused,
+            ended: v.ended,
+            muted: v.muted,
+            volume: v.volume,
+            currentTime: Math.round(v.currentTime * 10) / 10,
+            size: [v.videoWidth, v.videoHeight],
+            box: [v.clientWidth, v.clientHeight],
+            hasSrcObject: !!v.srcObject,
+            srcIsOurStream: v.srcObject === this.stream,
+            errorCode: v.error?.code ?? null,
+            frames: q ? { total: q.totalVideoFrames, dropped: q.droppedVideoFrames, corrupted: (q as any).corruptedVideoFrames } : null,
+          }
+        : null,
+      browser: { gpu, canDecode },
+      events: this.events.map((e) => `+${Math.round((e.at - this.startedAt) / 100) / 10}s ${e.msg}`),
+    };
   }
 
   /** Tries again after "kicked" or a connection problem. */
@@ -140,6 +284,7 @@ export class ViewerService {
 
   private setPaused(paused: boolean): void {
     if (this.pausedSent === paused || !this.transport) return;
+    this.note(`paused=${paused}`);
     this.pausedSent = paused;
     this.sig.request('setPaused', { paused }).catch(() => undefined);
   }
@@ -170,6 +315,7 @@ export class ViewerService {
         rtpCapabilities: types.RtpCapabilities;
       }>('joinRoom', { slug: this.slug, key: this.key, nickname: this.nickname, token: this.api.token() ?? undefined });
       if (gen !== this.generation) return;
+      this.note(`joined room (live=${joined.live})`);
       this.myName.set(joined.name);
       this.lostAt = null;
       this.roomName.set(joined.room.name);
@@ -191,6 +337,7 @@ export class ViewerService {
         this.sig.request('connectTransport', { transportId: transport.id, dtlsParameters }).then(ok, fail);
       });
       transport.on('connectionstatechange', (state) => {
+        this.note(`transport ${state}`);
         if (state === 'failed' && gen === this.generation) this.scheduleRetry(2000);
       });
       this.device = device;
@@ -203,6 +350,7 @@ export class ViewerService {
     } catch (e: any) {
       if (gen !== this.generation) return;
       const message: string = e?.message ?? 'Could not connect';
+      this.note(`setup failed: ${message}`);
       this.connecting.set(false);
       this.error.set(message);
       if (/not found/i.test(message) && this.lostAt && Date.now() - this.lostAt < 5 * 60_000) {
@@ -230,6 +378,7 @@ export class ViewerService {
   }
 
   private scheduleRetry(ms: number): void {
+    this.note(`retry in ${ms} ms`);
     clearTimeout(this.retryTimer);
     this.retryTimer = setTimeout(() => {
       this.teardown();
@@ -256,6 +405,7 @@ export class ViewerService {
         kind: data.kind,
         rtpParameters: data.rtpParameters,
       });
+      this.note(`consuming ${consumer.kind} (${consumer.rtpParameters.codecs[0]?.mimeType ?? '?'})`);
       this.consumers.set(consumer.id, consumer);
       this.stream.addTrack(consumer.track);
       this.trackCount.update((n) => n + 1);
@@ -270,6 +420,7 @@ export class ViewerService {
     } catch (e: any) {
       if (gen === this.generation) this.consuming.delete(producerId);
       const message: string = e?.message ?? 'Could not play the stream';
+      this.note(`consume failed: ${message}`);
       this.error.set(message);
       if (/full|capacity/i.test(message)) {
         this.problem.set('busy');
@@ -279,6 +430,7 @@ export class ViewerService {
   }
 
   private removeByProducer(producerId: string): void {
+    this.note('producerClosed');
     this.consuming.delete(producerId);
     for (const [id, c] of this.consumers) {
       if (c.producerId === producerId) {
@@ -298,8 +450,12 @@ export class ViewerService {
       // Live and joined, but no video consumer (a consume failed or an announcement was missed): resync, then start over.
       if (this.live() && this.transport && !this.blocked) {
         this.stalled++;
-        if (this.stalled === 3 || this.stalled === 6) this.syncProducers(this.generation).catch(() => undefined);
+        if (this.stalled === 3 || this.stalled === 6) {
+          this.note('watchdog: live but no video consumer, resyncing');
+          this.syncProducers(this.generation).catch(() => undefined);
+        }
         if (this.stalled >= 10) {
+          this.note('watchdog: still no video consumer, reconnecting');
           this.stalled = 0;
           this.scheduleRetry(0);
         }
@@ -315,8 +471,12 @@ export class ViewerService {
       // Black screen watchdog: connected but no frame decoded (or no RTP stats at all). Ask for a keyframe, then start over.
       if (this.live() && !this.pausedSent && !inbound?.framesDecoded) {
         this.stalled++;
-        if (this.stalled === 3 || this.stalled === 6) this.sig.request('requestKeyFrame', { consumerId: video.id }).catch(() => undefined);
+        if (this.stalled === 3 || this.stalled === 6) {
+          this.note('watchdog: no frame decoded, requesting a keyframe');
+          this.sig.request('requestKeyFrame', { consumerId: video.id }).catch(() => undefined);
+        }
         if (this.stalled >= 10) {
+          this.note('watchdog: no frame decoded for 10 s, reconnecting');
           this.stalled = 0;
           this.scheduleRetry(0);
         }

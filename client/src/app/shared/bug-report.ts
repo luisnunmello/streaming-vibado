@@ -3,6 +3,7 @@ import { FormsModule } from '@angular/forms';
 import { ApiService } from '../core/api.service';
 import { TPipe } from '../core/i18n.service';
 import { toast } from '../core/toast';
+import { ViewerService } from '../core/viewer.service';
 import { APP_VERSION } from '../core/version';
 import { Modal } from './modal';
 
@@ -49,6 +50,9 @@ const bytesOf = (dataUrl: string): number => ((dataUrl.length - dataUrl.indexOf(
         </div>
         @if (error()) {
           <p class="error">{{ error() | t }}</p>
+        }
+        @if (viewer.watching()) {
+          <p class="muted hint">{{ 'Technical details about the player (connection, video state, recent events) are attached to help find the problem.' | t }}</p>
         }
         <div class="modal-actions">
           <button class="btn" type="button" (click)="close()">{{ 'Cancel' | t }}</button>
@@ -104,6 +108,7 @@ const bytesOf = (dataUrl: string): number => ((dataUrl.length - dataUrl.indexOf(
 })
 export class BugReport {
   private readonly api = inject(ApiService);
+  protected readonly viewer = inject(ViewerService);
   protected readonly open = signal(false);
   protected readonly busy = signal(false);
   protected readonly error = signal<string | null>(null);
@@ -138,6 +143,28 @@ export class BugReport {
     }
   }
 
+  /** Technical details that make a report easier to debug: the browser, and the player's state when on the player page. */
+  private async collect(): Promise<Record<string, unknown>> {
+    const nav = navigator as any;
+    const out: Record<string, unknown> = {
+      page: location.pathname,
+      viewport: [innerWidth, innerHeight, devicePixelRatio],
+      online: navigator.onLine,
+      language: navigator.language,
+      cores: navigator.hardwareConcurrency,
+      memoryGb: nav.deviceMemory,
+      connection: nav.connection ? { type: nav.connection.effectiveType, downlinkMbps: nav.connection.downlink, rttMs: nav.connection.rtt } : undefined,
+    };
+    if (this.viewer.watching()) {
+      try {
+        out['player'] = await this.viewer.diagnostics();
+      } catch (e: any) {
+        out['player'] = { error: String(e?.message ?? e) };
+      }
+    }
+    return out;
+  }
+
   protected async send(): Promise<void> {
     this.busy.set(true);
     this.error.set(null);
@@ -148,6 +175,7 @@ export class BugReport {
         screenshot: this.shot()?.url,
         page: location.pathname,
         version: APP_VERSION,
+        diagnostics: await this.collect(),
       });
       this.title = '';
       this.description = '';
