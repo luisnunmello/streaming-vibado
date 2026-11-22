@@ -36,7 +36,26 @@
         <span class="pill" [class.live]="live()" [class.starting]="s.state() === 'starting'">
           {{ (live() ? 'LIVE' : s.state() === 'starting' ? 'STARTING' : 'OFFLINE') | t }}
         </span>
-        <span class="muted">{{ (s.viewers() === 1 ? '{n} viewer' : '{n} viewers') | t: { n: s.viewers() } }}</span>
+        <span class="people">
+          <button type="button" class="link" [class.on]="showViewers()" [disabled]="s.viewers() === 0"
+                  (click)="showViewers.set(!showViewers())" [attr.aria-expanded]="showViewers()" [attr.aria-label]="'Viewers' | t">
+            <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M12 4.5C7 4.5 2.7 7.6 1 12c1.7 4.4 6 7.5 11 7.5s9.3-3.1 11-7.5c-1.7-4.4-6-7.5-11-7.5zM12 17a5 5 0 1 1 0-10 5 5 0 0 1 0 10zm0-8a3 3 0 1 0 0 6 3 3 0 0 0 0-6z"/></svg>
+            {{ (s.viewers() === 1 ? '{n} viewer' : '{n} viewers') | t: { n: s.viewers() } }}
+          </button>
+          @if (showViewers() && s.viewers() > 0) {
+            <div class="list" role="dialog" [attr.aria-label]="'Viewers' | t">
+              <h2>{{ 'Watching now' | t }}</h2>
+              <ul>
+                @for (n of s.viewerList().names; track $index) {
+                  <li>{{ n }}</li>
+                }
+              </ul>
+              @if (s.viewerList().count > s.viewerList().names.length) {
+                <p class="more">{{ '+{n} more' | t: { n: s.viewerList().count - s.viewerList().names.length } }}</p>
+              }
+            </div>
+          }
+        </span>
         @if (live() && s.viewers() > 0) {
           <span class="muted" [title]="'Viewers × bitrate: what your server uploads right now (at most)' | t">{{ '≈ {n} Mbps out' | t: { n: egressMbps() } }}</span>
         }

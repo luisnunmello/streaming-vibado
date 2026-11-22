@@ -11,7 +11,7 @@ import { ControlBar } from '../shared/control-bar';
   imports: [BrowserWarning, ControlBar, TPipe],
   templateUrl: './streamer-panel.html',
   styleUrl: './streamer-panel.scss',
-  host: { '(document:fullscreenchange)': 'onFullscreenChange()' },
+  host: { '(document:fullscreenchange)': 'onFullscreenChange()', '(document:click)': 'onDocClick($event)', '(document:keydown.escape)': 'showViewers.set(false)' },
 })
 export class StreamerPanel implements OnInit {
   protected readonly s = inject(StreamerService);
@@ -37,6 +37,13 @@ export class StreamerPanel implements OnInit {
   protected readonly fullscreen = signal(false);
   protected readonly codecHint = computed(() => CODECS.find((c) => c.value === this.settings().codec)?.hint ?? '');
   protected readonly audioHint = computed(() => this.audioModes.find((m) => m.value === this.settings().audioMode)?.hint ?? '');
+  /** The "who is watching" list under the viewer count. */
+  protected readonly showViewers = signal(false);
+
+  protected onDocClick(e: MouseEvent): void {
+    if (this.showViewers() && !(e.target as Element | null)?.closest?.('.people')) this.showViewers.set(false);
+  }
+
   protected readonly egressMbps = computed(() => Math.round(this.s.viewers() * this.settings().bitrateMbps * 10) / 10);
 
   private readonly previewEl = viewChild<ElementRef<HTMLVideoElement>>('preview');

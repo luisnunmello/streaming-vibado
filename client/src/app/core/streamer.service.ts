@@ -47,6 +47,8 @@ export class StreamerService {
   readonly error = signal<string | null>(null);
   readonly notice = signal<string | null>(null);
   readonly viewers = signal(0);
+  /** Who is watching (names come a moment after the count; capped at 200 by the server). */
+  readonly viewerList = signal<{ count: number; names: string[] }>({ count: 0, names: [] });
   readonly preview = signal<MediaStream | null>(null);
   readonly stats = signal<StreamStats | null>(null);
   /** Native size of the captured surface. */
@@ -205,6 +207,7 @@ export class StreamerService {
         this.viewers.set(n);
         if (this.state() === 'live') this.sound.play(n > before ? 'viewerJoin' : n < before ? 'viewerLeave' : 'viewerJoin');
       }),
+      this.sig.on<{ count: number; names: string[] }>('viewers', (v) => this.viewerList.set(v)),
       // The studio was moved to another window: this one stops and lets go of the room.
       this.sig.on('ownerTaken', () => {
         this.error.set('This studio was moved to another window.');
@@ -335,6 +338,7 @@ export class StreamerService {
     this.settingsReady = false;
     this.changeRequested.set(false);
     this.viewers.set(0);
+    this.viewerList.set({ count: 0, names: [] });
     this.room.set(null);
     this.limits.set(null);
     this.error.set(null);
