@@ -180,6 +180,7 @@ export const PT: Record<string, string> = {
 
   // ---- lobbies
   'There are no public rooms yet.': 'Ainda não há salas públicas.',
+  'No other public rooms right now.': 'Nenhuma outra sala pública no momento.',
   'by {name}': 'por {name}',
   '{n} watching': '{n} assistindo',
   '{name}\'s room': 'Sala de {name}',

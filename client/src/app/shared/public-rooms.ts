@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit, inject, signal } from '@angular/core';
+import { Component, OnDestroy, OnInit, computed, inject, input, signal } from '@angular/core';
 import { I18nService, TPipe } from '../core/i18n.service';
 import { RouterLink } from '@angular/router';
 import { ApiService } from '../core/api.service';
@@ -11,10 +11,10 @@ import type { LobbyRoom } from '../core/models';
       @if (error()) {
         <p class="error">{{ error() | t }}</p>
       }
-      @if (loaded() && rooms().length === 0) {
-        <p class="muted">{{ 'There are no public rooms yet.' | t }}</p>
+      @if (loaded() && shown().length === 0) {
+        <p class="muted">{{ (exclude().length ? 'No other public rooms right now.' : 'There are no public rooms yet.') | t }}</p>
       }
-      @if (rooms().length > 0) {
+      @if (shown().length > 0) {
         <div class="card">
           <div class="table-wrap">
             <table class="list stack">
@@ -27,7 +27,7 @@ import type { LobbyRoom } from '../core/models';
                 </tr>
               </thead>
               <tbody>
-                @for (r of rooms(); track r.slug) {
+                @for (r of shown(); track r.slug) {
                   <tr>
                     <td>
                       <b>{{ i18n.roomName(r) }}</b>
@@ -67,7 +67,13 @@ import type { LobbyRoom } from '../core/models';
 export class PublicRooms implements OnInit, OnDestroy {
   private readonly api = inject(ApiService);
   protected readonly i18n = inject(I18nService);
+  /** Slugs already listed elsewhere on the page (the visitor's own rooms). */
+  readonly exclude = input<string[]>([]);
   protected readonly rooms = signal<LobbyRoom[]>([]);
+  protected readonly shown = computed(() => {
+    const skip = new Set(this.exclude());
+    return this.rooms().filter((r) => !skip.has(r.slug));
+  });
   protected readonly loaded = signal(false);
   protected readonly error = signal<string | null>(null);
   private timer?: ReturnType<typeof setInterval>;

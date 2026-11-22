@@ -156,9 +156,18 @@ import { absoluteUrl, copyText } from '../../core/util';
       </div>
     </div>
 
+    @if (!auth.isAdmin()) {
+      <!-- The list above only has the visitor's own rooms (the admin's has every room). -->
+      <h2 class="section">{{ 'Public rooms' | t }}</h2>
+      <app-public-rooms [exclude]="ownSlugs()" />
+    }
     }
   `,
   styles: `
+    .section {
+      margin: 1.6rem 0 0.8rem;
+      font-size: 1.1rem;
+    }
     .modal-actions {
       display: flex;
       justify-content: flex-end;
@@ -273,6 +282,8 @@ export class Rooms implements OnInit, OnDestroy {
   private timer?: ReturnType<typeof setInterval>;
 
   protected readonly ownCount = computed(() => this.rooms().filter((r) => this.isMine(r)).length);
+  /** Rooms in the list above, so the public list below does not repeat them. */
+  protected readonly ownSlugs = computed(() => this.rooms().map((r) => r.slug));
   protected readonly canPublic = computed(() => this.auth.me()?.limits?.allowPublicRooms !== false);
   protected readonly i18n = inject(I18nService);
   private readonly shareSvc = inject(ShareService);
