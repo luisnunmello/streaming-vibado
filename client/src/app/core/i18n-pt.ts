@@ -520,6 +520,7 @@ export const PT: Record<string, string> = {
   'This page controls your studio tab.': 'Esta página controla a aba do seu estúdio.',
   'asks that tab, where you click once to pick the new screen.': 'pede a essa aba, onde você clica uma vez para escolher a nova tela.',
   'Click to unmute': 'Clique para ativar o som',
+  'Click to play': 'Clique para assistir',
   'Stream is offline': 'A transmissão está offline',
   'It will start playing automatically when the broadcast begins.': 'Ela começará a tocar automaticamente quando a transmissão começar.',
   'You are not streaming right now.': 'Você não está transmitindo agora.',

@@ -78,6 +78,11 @@
         }
       }
     </div>
+  } @else if (playBlocked()) {
+    <button class="play" type="button" (click)="clickToPlay()">
+      <svg viewBox="0 0 24 24" width="44" height="44" aria-hidden="true"><path fill="currentColor" d="M8 5v14l11-7z"/></svg>
+      {{ 'Click to play' | t }}
+    </button>
   } @else if (needsUnmute()) {
     <button class="unmute" type="button" (click)="unmute()">
       <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="currentColor" d="M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0 0 14 7.97v8.05A4.5 4.5 0 0 0 16.5 12zM14 3.23v2.06a7 7 0 0 1 0 13.42v2.06a9 9 0 0 0 0-17.54z"/></svg>

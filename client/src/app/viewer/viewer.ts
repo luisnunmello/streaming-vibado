@@ -62,8 +62,39 @@ export class Viewer implements OnInit, OnDestroy {
     if (!this.v.trackCount()) return;
     const el = this.video().nativeElement;
     if (el.srcObject !== this.v.stream) el.srcObject = this.v.stream;
-    el.play().catch(() => undefined);
+    this.play();
   });
+
+  /** The browser refused to start the video, even muted: the visitor has to click once. */
+  protected readonly playBlocked = signal(false);
+
+  /**
+   * Starts the element. `muted` is set as a property every time: the template's `muted`
+   * attribute is added after the element exists, which browsers ignore, so the element would
+   * otherwise be unmuted and autoplay is refused for visitors the browser does not trust yet
+   * (Chrome's media engagement, Brave). A refusal while unmuted falls back to muted playback.
+   */
+  private play(): void {
+    const el = this.video().nativeElement;
+    el.muted = this.muted();
+    el.play()
+      .then(() => this.playBlocked.set(false))
+      .catch((e: unknown) => {
+        const name = (e as { name?: string })?.name ?? 'Error';
+        if (name === 'AbortError') return; // a newer load or play() took over
+        this.v.note(`play() refused (${name}, muted=${el.muted})`);
+        if (!el.muted) {
+          this.muted.set(true);
+          this.play();
+        } else {
+          this.playBlocked.set(true);
+        }
+      });
+  }
+
+  protected clickToPlay(): void {
+    this.setMuted(false); // runs inside the click, so unmuted playback is allowed
+  }
 
   // ---- who is watching
   protected readonly showViewers = signal(false);
@@ -120,7 +151,7 @@ export class Viewer implements OnInit, OnDestroy {
       const el = this.video().nativeElement;
       this.v.registerVideo(el);
       el.srcObject = this.v.stream;
-      el.play().catch(() => undefined);
+      this.play();
     });
   }
 
@@ -158,7 +189,7 @@ export class Viewer implements OnInit, OnDestroy {
     el.muted = m;
     this.muted.set(m);
     if (!m && this.volume() === 0) this.setVolume(1);
-    el.play().catch(() => undefined);
+    this.play();
   }
 
   protected setVolume(value: number): void {

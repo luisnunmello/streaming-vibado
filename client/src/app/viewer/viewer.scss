@@ -172,6 +172,26 @@ video {
   }
 }
 
+.play {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  z-index: 3;
+  width: fit-content;
+  height: fit-content;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 1.1rem 1.6rem;
+  font-size: 1rem;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.6);
+  border: 0;
+  border-radius: 14px;
+  cursor: pointer;
+}
+
 .unmute {
   position: absolute;
   right: max(1rem, env(safe-area-inset-right));

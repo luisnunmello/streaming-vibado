@@ -88,7 +88,7 @@ export class ViewerService {
   }
 
   /** Short log of what the player did lately (kept small; sent with bug reports). */
-  private note(msg: string): void {
+  note(msg: string): void {
     this.events.push({ at: Date.now(), msg: msg.slice(0, 160) });
     if (this.events.length > 40) this.events.shift();
   }
