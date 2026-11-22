@@ -172,7 +172,7 @@ export class LiveService {
     for (const rt of rooms) {
       // ceiling on what the connection may carry, as when it was created
       const cap = Math.round(limits.maxBitrateMbps * 1.7e6 + 0.3e6);
-      for (const t of rt.ownerTransports.values()) t.transport.setMaxIncomingBitrate(cap).catch(() => undefined);
+      for (const t of rt.ownerTransports.values()) t.transport.setMaxIncomingBitrate(cap).catch((e) => console.warn(`[live] could not update the bitrate cap of room ${rt.room.id}:`, e?.message ?? e));
       if (!limits.allowAudio) {
         for (const p of [...rt.producers.values()]) {
           if (p.kind !== 'audio') continue;
@@ -666,6 +666,8 @@ export class LiveService {
     if (!rt) return;
     const wanted = ci.pref < 0 ? ci.spatialLayers - 1 : Math.min(ci.pref, ci.spatialLayers - 1);
     const spatialLayer = Math.min(wanted, this.layerCapFor(rt));
-    ci.consumer.setPreferredLayers({ spatialLayer, temporalLayer: 2 }).catch(() => undefined);
+    ci.consumer.setPreferredLayers({ spatialLayer, temporalLayer: 2 }).catch((e) => {
+      if (!ci.consumer.closed) console.warn(`[live] could not set layer ${spatialLayer} for a viewer of room ${rt.room.id}:`, e?.message ?? e);
+    });
   }
 }

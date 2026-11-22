@@ -683,7 +683,14 @@ export class StreamerService {
         this.appliedFps = s.fps;
         // applyConstraints replaces the whole set, so the size caps must be sent again,
         // and we must wait for it before reading the (possibly changed) source size.
-        await video.applyConstraints(this.captureConstraints(s.fps, s.height)).catch(() => undefined);
+        try {
+          await video.applyConstraints(this.captureConstraints(s.fps, s.height));
+        } catch (e) {
+          // Not applied: forget it so the next change tries again, and tell the streamer.
+          console.warn('Could not change the capture frame rate / size', e);
+          this.appliedFps = this.appliedHeight = 0;
+          this.notice.set('The browser refused the new frame rate or resolution for this capture; it keeps the previous one.');
+        }
       }
       this.updateSource(video);
     }

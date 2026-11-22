@@ -521,6 +521,7 @@ export const PT: Record<string, string> = {
   'asks that tab, where you click once to pick the new screen.': 'pede a essa aba, onde você clica uma vez para escolher a nova tela.',
   'Click to unmute': 'Clique para ativar o som',
   'Click to play': 'Clique para assistir',
+  'The browser refused the new frame rate or resolution for this capture; it keeps the previous one.': 'O navegador recusou a nova taxa de quadros ou resolução para esta captura; ela mantém a anterior.',
   'Stream is offline': 'A transmissão está offline',
   'It will start playing automatically when the broadcast begins.': 'Ela começará a tocar automaticamente quando a transmissão começar.',
   'You are not streaming right now.': 'Você não está transmitindo agora.',

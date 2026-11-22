@@ -279,14 +279,31 @@ export class ViewerService {
   setQuality(q: Quality): void {
     this.quality.set(q);
     const video = [...this.consumers.values()].find((c) => c.kind === 'video');
-    if (video) this.sig.request('setQuality', { consumerId: video.id, quality: q }).catch(() => undefined);
+    if (video) this.sendQuality(video.id, q);
+  }
+
+  /** A refusal only means the server keeps sending the previous quality; it is logged for bug reports. */
+  private sendQuality(consumerId: string, q: Quality): void {
+    this.sig.request('setQuality', { consumerId, quality: q }).catch((e: any) => this.note(`setQuality ${q} failed: ${e?.message ?? e}`));
   }
 
   private setPaused(paused: boolean): void {
     if (this.pausedSent === paused || !this.transport) return;
     this.note(`paused=${paused}`);
     this.pausedSent = paused;
-    this.sig.request('setPaused', { paused }).catch(() => undefined);
+    const transport = this.transport;
+    this.sig.request('setPaused', { paused }).catch((e: any) => {
+      this.note(`setPaused ${paused} failed: ${e?.message ?? e}`);
+      // Stale answer (newer request, or a reconnect since): nothing to undo.
+      if (this.transport !== transport || this.pausedSent !== paused) return;
+      // The server kept the old state: say so, and keep asking to resume while the tab is visible
+      // (otherwise the picture stays frozen and the client believes it is playing).
+      this.pausedSent = !paused;
+      if (!paused) {
+        clearTimeout(this.hideTimer);
+        this.hideTimer = setTimeout(() => !document.hidden && this.setPaused(false), 2000);
+      }
+    });
   }
 
   private teardown(): void {
@@ -412,7 +429,7 @@ export class ViewerService {
       if (consumer.kind === 'audio') this.hasAudio.set(true);
       if (consumer.kind === 'video') {
         this.layers.set(data.spatialLayers ?? 1);
-        if (this.quality() !== 'auto') this.sig.request('setQuality', { consumerId: consumer.id, quality: this.quality() }).catch(() => undefined);
+        if (this.quality() !== 'auto') this.sendQuality(consumer.id, this.quality());
       }
       await this.sig.request('resumeConsumer', { consumerId: consumer.id });
       this.error.set(null);
